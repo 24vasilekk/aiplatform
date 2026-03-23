@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, hasDemoPaidAccess } from "@/lib/auth";
 import { hasCourseAccess } from "@/lib/db";
 import {
   getCatalogCourseById,
@@ -25,7 +25,9 @@ export default async function CoursePage({
     notFound();
   }
 
-  const access = user.role === "admin" ? true : await hasCourseAccess(user.id, course.id);
+  const paidByCookie = await hasDemoPaidAccess();
+  const access =
+    user.role === "admin" ? true : paidByCookie || (await hasCourseAccess(user.id, course.id));
   if (!access && user.role !== "admin") {
     redirect("/pricing");
   }

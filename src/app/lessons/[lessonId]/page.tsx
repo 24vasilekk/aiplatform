@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, hasDemoPaidAccess } from "@/lib/auth";
 import { hasCourseAccess } from "@/lib/db";
 import { LessonWorkspace } from "@/components/lesson-workspace";
 import { getCatalogLessonById, getCourseIdByLessonId } from "@/lib/course-catalog";
@@ -26,7 +26,8 @@ export default async function LessonPage({
     notFound();
   }
 
-  const access = user.role === "admin" ? true : await hasCourseAccess(user.id, courseId);
+  const paidByCookie = await hasDemoPaidAccess();
+  const access = user.role === "admin" ? true : paidByCookie || (await hasCourseAccess(user.id, courseId));
   if (!access && user.role !== "admin") {
     redirect("/pricing");
   }

@@ -33,6 +33,13 @@ export function authCookieName() {
   return AUTH_COOKIE;
 }
 
+export const DEMO_PAID_COOKIE = "ege_paid_all";
+
+export async function hasDemoPaidAccess() {
+  const cookieStore = await cookies();
+  return cookieStore.get(DEMO_PAID_COOKIE)?.value === "1";
+}
+
 export async function getCurrentUser() {
   const cookieStore = await cookies();
   const token = cookieStore.get(AUTH_COOKIE)?.value;
