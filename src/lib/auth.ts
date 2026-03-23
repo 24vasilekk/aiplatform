@@ -34,10 +34,30 @@ export function authCookieName() {
 }
 
 export const DEMO_PAID_COOKIE = "ege_paid_all";
+export const DEMO_PAID_COURSES_COOKIE = "ege_paid_courses";
 
-export async function hasDemoPaidAccess() {
+export type DemoPaidAccessSnapshot = {
+  all: boolean;
+  courseIds: string[];
+};
+
+export async function getDemoPaidAccessSnapshot(): Promise<DemoPaidAccessSnapshot> {
   const cookieStore = await cookies();
-  return cookieStore.get(DEMO_PAID_COOKIE)?.value === "1";
+  const all = cookieStore.get(DEMO_PAID_COOKIE)?.value === "1";
+  const rawCourseIds = cookieStore.get(DEMO_PAID_COURSES_COOKIE)?.value ?? "";
+  const courseIds = rawCourseIds
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return { all, courseIds };
+}
+
+export async function hasDemoPaidAccess(courseId?: string) {
+  const snapshot = await getDemoPaidAccessSnapshot();
+  if (snapshot.all) return true;
+  if (!courseId) return false;
+  return snapshot.courseIds.includes(courseId);
 }
 
 export async function getCurrentUser() {

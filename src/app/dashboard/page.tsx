@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getCurrentUser, hasDemoPaidAccess } from "@/lib/auth";
+import { getCurrentUser, getDemoPaidAccessSnapshot } from "@/lib/auth";
 import { hasCourseAccess, listProgress } from "@/lib/db";
 import { listAllCourses } from "@/lib/course-catalog";
 
@@ -11,13 +11,16 @@ export default async function DashboardPage() {
   }
 
   const progress = await listProgress(user.id);
-  const paidByCookie = await hasDemoPaidAccess();
+  const paidSnapshot = await getDemoPaidAccessSnapshot();
 
   const courses = await listAllCourses();
   const items = await Promise.all(
     courses.map(async (course) => ({
       ...course,
-      hasAccess: paidByCookie || (await hasCourseAccess(user.id, course.id)),
+      hasAccess:
+        paidSnapshot.all ||
+        paidSnapshot.courseIds.includes(course.id) ||
+        (await hasCourseAccess(user.id, course.id)),
     })),
   );
 

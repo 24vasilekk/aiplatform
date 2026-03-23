@@ -26,7 +26,7 @@ export default async function LessonPage({
     notFound();
   }
 
-  const paidByCookie = await hasDemoPaidAccess();
+  const paidByCookie = await hasDemoPaidAccess(courseId);
   const access = user.role === "admin" ? true : paidByCookie || (await hasCourseAccess(user.id, courseId));
   if (!access && user.role !== "admin") {
     redirect("/pricing");

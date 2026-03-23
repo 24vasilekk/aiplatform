@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
-import { PricingAction } from "@/components/pricing-action";
+import { PricingPlans } from "@/components/pricing-plans";
 
 export default async function PricingPage() {
   const user = await getCurrentUser();
@@ -9,19 +9,23 @@ export default async function PricingPage() {
   }
 
   return (
-    <section className="grid gap-4 md:grid-cols-2">
+    <section className="space-y-5">
       <article className="panel-accent">
-        <h1 className="mb-2 text-2xl font-semibold">Подписка MVP</h1>
-        <p className="mb-4 text-slate-600">Доступ ко всем урокам и AI-чату.</p>
-        <p className="mb-4 text-3xl font-bold">1490 ₽ / месяц</p>
-        <PricingAction />
+        <h1 className="mb-2 text-2xl font-semibold">Оплата и доступ</h1>
+        <p className="text-slate-600">
+          Выберите формат обучения: один курс, пакет 1+1 или полный доступ ко всем курсам.
+        </p>
       </article>
+
+      <PricingPlans userEmail={user.email} />
+
       <article className="panel-accent">
         <h2 className="mb-2 text-lg font-semibold">Логика доступа</h2>
         <ul className="list-disc space-y-1 pl-5 text-sm text-slate-700">
           <li>Без оплаты уроки закрыты</li>
           <li>После оплаты доступ открывается автоматически</li>
           <li>Проверка доступа выполняется на backend</li>
+          <li>В демо-режиме платеж имитируется, далее подключим реальную кассу</li>
         </ul>
       </article>
     </section>

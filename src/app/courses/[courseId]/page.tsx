@@ -25,7 +25,7 @@ export default async function CoursePage({
     notFound();
   }
 
-  const paidByCookie = await hasDemoPaidAccess();
+  const paidByCookie = await hasDemoPaidAccess(course.id);
   const access =
     user.role === "admin" ? true : paidByCookie || (await hasCourseAccess(user.id, course.id));
   if (!access && user.role !== "admin") {
