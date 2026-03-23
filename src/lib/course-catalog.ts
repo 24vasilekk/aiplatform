@@ -5,8 +5,9 @@ import {
   type Course,
   type Section,
   type Lesson,
+  type Task,
 } from "@/lib/mvp-data";
-import { listCustomCourses, listCustomLessons, listCustomSections } from "@/lib/db";
+import { listCustomCourses, listCustomLessons, listCustomSections, listCustomTasks } from "@/lib/db";
 
 export type CatalogCourse = Course & {
   source: "static" | "custom";
@@ -63,6 +64,7 @@ export async function listSectionsByCourseId(courseId: string): Promise<CatalogS
 
 export async function listLessonsBySectionId(sectionId: string): Promise<CatalogLesson[]> {
   const customLessons = await listCustomLessons();
+  const customTasks = await listCustomTasks();
 
   return [
     ...staticLessons
@@ -76,7 +78,18 @@ export async function listLessonsBySectionId(sectionId: string): Promise<Catalog
         title: lesson.title,
         description: lesson.description,
         videoUrl: lesson.videoUrl,
-        tasks: [],
+        tasks: customTasks
+          .filter((task) => task.lessonId === lesson.id)
+          .map(
+            (task): Task => ({
+              id: task.id,
+              type: task.type,
+              question: task.question,
+              options: task.options ?? undefined,
+              answer: task.answer,
+              solution: task.solution,
+            }),
+          ),
         source: "custom" as const,
       })),
   ];
@@ -93,6 +106,7 @@ export async function getCatalogLessonById(lessonId: string): Promise<CatalogLes
   if (!customLesson) {
     return null;
   }
+  const customTasks = await listCustomTasks();
 
   return {
     id: customLesson.id,
@@ -100,7 +114,18 @@ export async function getCatalogLessonById(lessonId: string): Promise<CatalogLes
     title: customLesson.title,
     description: customLesson.description,
     videoUrl: customLesson.videoUrl,
-    tasks: [],
+    tasks: customTasks
+      .filter((task) => task.lessonId === customLesson.id)
+      .map(
+        (task): Task => ({
+          id: task.id,
+          type: task.type,
+          question: task.question,
+          options: task.options ?? undefined,
+          answer: task.answer,
+          solution: task.solution,
+        }),
+      ),
     source: "custom",
   };
 }

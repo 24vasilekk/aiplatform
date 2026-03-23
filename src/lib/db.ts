@@ -79,6 +79,17 @@ export type CustomLessonRecord = {
   createdAt: string;
 };
 
+export type CustomTaskRecord = {
+  id: string;
+  lessonId: string;
+  type: "numeric" | "choice";
+  question: string;
+  options: string[] | null;
+  answer: string;
+  solution: string;
+  createdAt: string;
+};
+
 type DbShape = {
   users: UserRecord[];
   courseAccesses: CourseAccessRecord[];
@@ -88,6 +99,7 @@ type DbShape = {
   customCourses: CustomCourseRecord[];
   customSections: CustomSectionRecord[];
   customLessons: CustomLessonRecord[];
+  customTasks: CustomTaskRecord[];
 };
 
 const DB_PATH = path.join(process.cwd(), "data", "db.json");
@@ -101,6 +113,7 @@ const initialDb: DbShape = {
   customCourses: [],
   customSections: [],
   customLessons: [],
+  customTasks: [],
 };
 
 function uid(prefix: string) {
@@ -130,6 +143,7 @@ export async function readDb(): Promise<DbShape> {
     customCourses: parsed.customCourses ?? [],
     customSections: parsed.customSections ?? [],
     customLessons: parsed.customLessons ?? [],
+    customTasks: parsed.customTasks ?? [],
   };
 }
 
@@ -395,10 +409,14 @@ export async function deleteCustomCourse(courseId: string) {
   const sectionIds = db.customSections
     .filter((section) => section.courseId === courseId)
     .map((section) => section.id);
+  const lessonIds = db.customLessons
+    .filter((lesson) => sectionIds.includes(lesson.sectionId))
+    .map((lesson) => lesson.id);
 
   db.customCourses = db.customCourses.filter((item) => item.id !== courseId);
   db.customSections = db.customSections.filter((item) => item.courseId !== courseId);
   db.customLessons = db.customLessons.filter((lesson) => !sectionIds.includes(lesson.sectionId));
+  db.customTasks = db.customTasks.filter((task) => !lessonIds.includes(task.lessonId));
   db.courseAccesses = db.courseAccesses.filter((access) => access.courseId !== courseId);
 
   await writeDb(db);
@@ -444,8 +462,13 @@ export async function deleteCustomSection(sectionId: string) {
   const section = db.customSections.find((item) => item.id === sectionId);
   if (!section) return false;
 
+  const lessonIds = db.customLessons
+    .filter((lesson) => lesson.sectionId === sectionId)
+    .map((lesson) => lesson.id);
+
   db.customSections = db.customSections.filter((item) => item.id !== sectionId);
   db.customLessons = db.customLessons.filter((lesson) => lesson.sectionId !== sectionId);
+  db.customTasks = db.customTasks.filter((task) => !lessonIds.includes(task.lessonId));
 
   await writeDb(db);
   return true;
@@ -507,6 +530,106 @@ export async function deleteCustomLesson(lessonId: string) {
   if (!exists) return false;
 
   db.customLessons = db.customLessons.filter((item) => item.id !== lessonId);
+  db.customTasks = db.customTasks.filter((task) => task.lessonId !== lessonId);
+  await writeDb(db);
+  return true;
+}
+
+export async function listCustomTasks() {
+  const db = await readDb();
+  return db.customTasks;
+}
+
+export async function listCustomTasksByLessonId(lessonId: string) {
+  const db = await readDb();
+  return db.customTasks.filter((task) => task.lessonId === lessonId);
+}
+
+export async function findCustomTaskById(taskId: string) {
+  const db = await readDb();
+  return db.customTasks.find((task) => task.id === taskId) ?? null;
+}
+
+export async function createCustomTask(input: {
+  lessonId: string;
+  type: "numeric" | "choice";
+  question: string;
+  options?: string[] | null;
+  answer: string;
+  solution: string;
+}) {
+  const db = await readDb();
+
+  const task: CustomTaskRecord = {
+    id: `custom-${uid("task")}`,
+    lessonId: input.lessonId,
+    type: input.type,
+    question: input.question,
+    options: input.type === "choice" ? (input.options ?? []) : null,
+    answer: input.answer,
+    solution: input.solution,
+    createdAt: new Date().toISOString(),
+  };
+
+  db.customTasks.push(task);
+  await writeDb(db);
+
+  return task;
+}
+
+export async function updateCustomTask(
+  taskId: string,
+  input: {
+    type?: "numeric" | "choice";
+    question?: string;
+    options?: string[] | null;
+    answer?: string;
+    solution?: string;
+    lessonId?: string;
+  },
+) {
+  const db = await readDb();
+  const task = db.customTasks.find((item) => item.id === taskId);
+  if (!task) return null;
+
+  if (typeof input.lessonId === "string") {
+    task.lessonId = input.lessonId;
+  }
+  if (typeof input.type === "string") {
+    task.type = input.type;
+    if (input.type === "numeric") {
+      task.options = null;
+    }
+  }
+  if (typeof input.question === "string") {
+    task.question = input.question;
+  }
+  if (typeof input.answer === "string") {
+    task.answer = input.answer;
+  }
+  if (typeof input.solution === "string") {
+    task.solution = input.solution;
+  }
+  if (input.options !== undefined) {
+    task.options = input.options;
+  }
+
+  if (task.type === "numeric") {
+    task.options = null;
+  } else {
+    task.options = task.options ?? [];
+  }
+
+  await writeDb(db);
+  return task;
+}
+
+export async function deleteCustomTask(taskId: string) {
+  const db = await readDb();
+  const exists = db.customTasks.some((item) => item.id === taskId);
+  if (!exists) return false;
+
+  db.customTasks = db.customTasks.filter((item) => item.id !== taskId);
   await writeDb(db);
   return true;
 }

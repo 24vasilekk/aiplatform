@@ -57,15 +57,15 @@ export default async function CoursePage({
           <ul className="space-y-2">
             {lessons.map((lesson) => {
               return (
-                <li key={lesson.id} className="flex items-center justify-between rounded-md border border-slate-100 p-2">
+                <li
+                  key={lesson.id}
+                  className="flex flex-col gap-2 rounded-md border border-slate-100 p-2 sm:flex-row sm:items-center sm:justify-between"
+                >
                   <div>
                     <p className="font-medium">{lesson.title}</p>
                     <p className="text-sm text-slate-600">{lesson.description}</p>
                   </div>
-                  <Link
-                    href={`/lessons/${lesson.id}`}
-                    className="btn-primary inline-block"
-                  >
+                  <Link href={`/lessons/${lesson.id}`} className="btn-primary inline-block self-start sm:self-auto">
                     Открыть урок
                   </Link>
                 </li>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { lessons } from "@/lib/mvp-data";
-import { saveTaskAttempt } from "@/lib/db";
+import { findCustomTaskById, saveTaskAttempt } from "@/lib/db";
 import { requireUser } from "@/lib/api-auth";
 
 const schema = z.object({
@@ -25,23 +25,31 @@ export async function POST(
   }
 
   const task = lessons.flatMap((lesson) => lesson.tasks).find((item) => item.id === taskId);
+  const customTask = task ? null : await findCustomTaskById(taskId);
+  const resolvedTask = task ?? customTask;
 
-  if (!task) {
+  if (!resolvedTask) {
     return NextResponse.json({ error: "Task not found" }, { status: 404 });
   }
 
-  const isCorrect = parsed.data.answer === task.answer;
+  const normalizedAnswer = parsed.data.answer.trim().toLowerCase();
+  const normalizedExpected = resolvedTask.answer.trim().toLowerCase();
+  const isCorrect = normalizedAnswer === normalizedExpected;
 
-  await saveTaskAttempt({
-    userId: auth.user.id,
-    taskId,
-    answerText: parsed.data.answer,
-    isCorrect,
-  });
+  try {
+    await saveTaskAttempt({
+      userId: auth.user.id,
+      taskId,
+      answerText: parsed.data.answer,
+      isCorrect,
+    });
+  } catch {
+    // Allow response even if persistence is unavailable (e.g., read-only serverless fs).
+  }
 
   return NextResponse.json({
     taskId,
     isCorrect,
-    solution: task.solution,
+    solution: resolvedTask.solution,
   });
 }

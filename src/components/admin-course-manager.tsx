@@ -26,14 +26,36 @@ type Lesson = {
   createdAt: string;
 };
 
+type CustomTask = {
+  id: string;
+  lessonId: string;
+  type: "numeric" | "choice";
+  question: string;
+  options: string[] | null;
+  answer: string;
+  solution: string;
+  createdAt: string;
+};
+
+type AdminUser = {
+  id: string;
+  email: string;
+  role: "student" | "admin";
+  createdAt: string;
+};
+
 export function AdminCourseManager({
   initialCourses,
   initialSections,
   initialLessons,
+  initialTasks,
+  initialUsers,
 }: {
   initialCourses: Course[];
   initialSections: Section[];
   initialLessons: Lesson[];
+  initialTasks: CustomTask[];
+  initialUsers: AdminUser[];
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -47,9 +69,19 @@ export function AdminCourseManager({
   const [lessonVideoUrl, setLessonVideoUrl] = useState("https://www.youtube.com/embed/dQw4w9WgXcQ");
   const [lessonSectionId, setLessonSectionId] = useState(initialSections[0]?.id ?? "");
 
+  const [taskLessonId, setTaskLessonId] = useState(initialLessons[0]?.id ?? "");
+  const [taskType, setTaskType] = useState<"numeric" | "choice">("numeric");
+  const [taskQuestion, setTaskQuestion] = useState("");
+  const [taskOptionsRaw, setTaskOptionsRaw] = useState("");
+  const [taskAnswer, setTaskAnswer] = useState("");
+  const [taskSolution, setTaskSolution] = useState("");
+
   const [courses, setCourses] = useState<Course[]>(initialCourses);
   const [sections, setSections] = useState<Section[]>(initialSections);
   const [lessons, setLessons] = useState<Lesson[]>(initialLessons);
+  const [tasks, setTasks] = useState<CustomTask[]>(initialTasks);
+  const [users, setUsers] = useState<AdminUser[]>(initialUsers);
+
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -63,12 +95,35 @@ export function AdminCourseManager({
     }, {});
   }, [sections]);
 
+  const lessonsBySection = useMemo(() => {
+    return lessons.reduce<Record<string, Lesson[]>>((acc, lesson) => {
+      if (!acc[lesson.sectionId]) {
+        acc[lesson.sectionId] = [];
+      }
+      acc[lesson.sectionId].push(lesson);
+      return acc;
+    }, {});
+  }, [lessons]);
+
+  const tasksByLesson = useMemo(() => {
+    return tasks.reduce<Record<string, CustomTask[]>>((acc, task) => {
+      if (!acc[task.lessonId]) {
+        acc[task.lessonId] = [];
+      }
+      acc[task.lessonId].push(task);
+      return acc;
+    }, {});
+  }, [tasks]);
+
   const activeSectionCourseId = courses.some((course) => course.id === sectionCourseId)
     ? sectionCourseId
     : (courses[0]?.id ?? "");
   const activeLessonSectionId = sections.some((section) => section.id === lessonSectionId)
     ? lessonSectionId
     : (sections[0]?.id ?? "");
+  const activeTaskLessonId = lessons.some((lesson) => lesson.id === taskLessonId)
+    ? taskLessonId
+    : (lessons[0]?.id ?? "");
 
   async function loadCourses() {
     const response = await fetch("/api/admin/courses", { cache: "no-store" });
@@ -76,9 +131,6 @@ export function AdminCourseManager({
 
     const data = (await response.json()) as Course[];
     setCourses(data);
-    if (!sectionCourseId && data[0]) {
-      setSectionCourseId(data[0].id);
-    }
   }
 
   async function loadSections() {
@@ -87,9 +139,6 @@ export function AdminCourseManager({
 
     const data = (await response.json()) as Section[];
     setSections(data);
-    if (!lessonSectionId && data[0]) {
-      setLessonSectionId(data[0].id);
-    }
   }
 
   async function loadLessons() {
@@ -100,8 +149,24 @@ export function AdminCourseManager({
     setLessons(data);
   }
 
+  async function loadTasks() {
+    const response = await fetch("/api/admin/tasks", { cache: "no-store" });
+    if (!response.ok) return;
+
+    const data = (await response.json()) as CustomTask[];
+    setTasks(data);
+  }
+
+  async function loadUsers() {
+    const response = await fetch("/api/admin/users", { cache: "no-store" });
+    if (!response.ok) return;
+
+    const data = (await response.json()) as AdminUser[];
+    setUsers(data);
+  }
+
   async function refreshAll() {
-    await Promise.all([loadCourses(), loadSections(), loadLessons()]);
+    await Promise.all([loadCourses(), loadSections(), loadLessons(), loadTasks(), loadUsers()]);
   }
 
   async function onCourseSubmit(event: FormEvent<HTMLFormElement>) {
@@ -180,6 +245,47 @@ export function AdminCourseManager({
     await loadLessons();
   }
 
+  async function onTaskSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    const options =
+      taskType === "choice"
+        ? taskOptionsRaw
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean)
+        : undefined;
+
+    const response = await fetch("/api/admin/tasks", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        lessonId: activeTaskLessonId,
+        type: taskType,
+        question: taskQuestion,
+        options,
+        answer: taskAnswer,
+        solution: taskSolution,
+      }),
+    });
+
+    const data = (await response.json()) as { error?: string };
+    setLoading(false);
+
+    if (!response.ok) {
+      setError(data.error ?? "Не удалось создать задание");
+      return;
+    }
+
+    setTaskQuestion("");
+    setTaskAnswer("");
+    setTaskSolution("");
+    setTaskOptionsRaw("");
+    await loadTasks();
+  }
+
   async function editCourse(course: Course) {
     const nextTitle = window.prompt("Новое название курса", course.title);
     if (nextTitle === null) return;
@@ -212,7 +318,7 @@ export function AdminCourseManager({
   }
 
   async function deleteCourse(course: Course) {
-    if (!window.confirm(`Удалить курс \"${course.title}\"? Это удалит разделы и уроки.`)) {
+    if (!window.confirm(`Удалить курс \"${course.title}\"? Это удалит разделы, уроки и задания.`)) {
       return;
     }
 
@@ -246,7 +352,7 @@ export function AdminCourseManager({
   }
 
   async function deleteSection(section: Section) {
-    if (!window.confirm(`Удалить раздел \"${section.title}\"? Это удалит его уроки.`)) {
+    if (!window.confirm(`Удалить раздел \"${section.title}\"? Это удалит его уроки и задания.`)) {
       return;
     }
 
@@ -290,7 +396,7 @@ export function AdminCourseManager({
   }
 
   async function deleteLesson(lesson: Lesson) {
-    if (!window.confirm(`Удалить урок \"${lesson.title}\"?`)) {
+    if (!window.confirm(`Удалить урок \"${lesson.title}\"? Это удалит задания урока.`)) {
       return;
     }
 
@@ -304,9 +410,71 @@ export function AdminCourseManager({
     await refreshAll();
   }
 
+  async function editTask(task: CustomTask) {
+    const nextQuestion = window.prompt("Новый текст задания", task.question);
+    if (nextQuestion === null) return;
+
+    const nextTypeRaw = window.prompt("Тип (numeric или choice)", task.type);
+    if (nextTypeRaw === null) return;
+    const nextType = nextTypeRaw === "choice" ? "choice" : "numeric";
+
+    const nextOptionsRaw =
+      nextType === "choice"
+        ? window.prompt("Варианты через запятую", (task.options ?? []).join(", "))
+        : null;
+    if (nextType === "choice" && nextOptionsRaw === null) return;
+
+    const nextAnswer = window.prompt("Правильный ответ", task.answer);
+    if (nextAnswer === null) return;
+
+    const nextSolution = window.prompt("Решение", task.solution);
+    if (nextSolution === null) return;
+
+    const response = await fetch(`/api/admin/tasks/${task.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        type: nextType,
+        question: nextQuestion,
+        options:
+          nextType === "choice"
+            ? (nextOptionsRaw ?? "")
+                .split(",")
+                .map((item) => item.trim())
+                .filter(Boolean)
+            : null,
+        answer: nextAnswer,
+        solution: nextSolution,
+      }),
+    });
+
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setError(data.error ?? "Не удалось обновить задание");
+      return;
+    }
+
+    await loadTasks();
+  }
+
+  async function deleteTask(task: CustomTask) {
+    if (!window.confirm("Удалить это задание?")) {
+      return;
+    }
+
+    const response = await fetch(`/api/admin/tasks/${task.id}`, { method: "DELETE" });
+    if (!response.ok) {
+      const data = (await response.json()) as { error?: string };
+      setError(data.error ?? "Не удалось удалить задание");
+      return;
+    }
+
+    await loadTasks();
+  }
+
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 xl:grid-cols-2">
         <form className="panel-accent space-y-3" onSubmit={onCourseSubmit}>
           <h2 className="text-lg font-semibold">1. Создать курс</h2>
           <input
@@ -435,12 +603,98 @@ export function AdminCourseManager({
             {loading ? "Создание..." : "Создать урок"}
           </button>
         </form>
+
+        <form className="panel-accent space-y-3" onSubmit={onTaskSubmit}>
+          <h2 className="text-lg font-semibold">4. Создать задание (часть 1)</h2>
+          {lessons.length === 0 ? (
+            <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
+              Сначала создайте урок.
+            </p>
+          ) : (
+            <div className="choice-group" role="radiogroup" aria-label="Урок для задания">
+              {lessons.map((lesson) => (
+                <button
+                  key={lesson.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={activeTaskLessonId === lesson.id}
+                  className={`choice-chip ${activeTaskLessonId === lesson.id ? "choice-chip-active" : ""}`}
+                  onClick={() => setTaskLessonId(lesson.id)}
+                >
+                  {lesson.title}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="choice-group" role="radiogroup" aria-label="Тип задания">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={taskType === "numeric"}
+              className={`choice-chip ${taskType === "numeric" ? "choice-chip-active" : ""}`}
+              onClick={() => setTaskType("numeric")}
+            >
+              Число
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={taskType === "choice"}
+              className={`choice-chip ${taskType === "choice" ? "choice-chip-active" : ""}`}
+              onClick={() => setTaskType("choice")}
+            >
+              Варианты
+            </button>
+          </div>
+
+          <textarea
+            placeholder="Текст задания"
+            className="w-full"
+            rows={3}
+            value={taskQuestion}
+            onChange={(event) => setTaskQuestion(event.target.value)}
+            required
+          />
+
+          {taskType === "choice" ? (
+            <input
+              type="text"
+              placeholder="Варианты через запятую: 2, 4, 8, 16"
+              className="w-full"
+              value={taskOptionsRaw}
+              onChange={(event) => setTaskOptionsRaw(event.target.value)}
+              required
+            />
+          ) : null}
+
+          <input
+            type="text"
+            placeholder="Правильный ответ"
+            className="w-full"
+            value={taskAnswer}
+            onChange={(event) => setTaskAnswer(event.target.value)}
+            required
+          />
+          <textarea
+            placeholder="Решение"
+            className="w-full"
+            rows={3}
+            value={taskSolution}
+            onChange={(event) => setTaskSolution(event.target.value)}
+            required
+          />
+
+          <button type="submit" className="btn-primary" disabled={loading || lessons.length === 0}>
+            {loading ? "Создание..." : "Создать задание"}
+          </button>
+        </form>
       </div>
 
       {error ? <p className="text-sm text-rose-600">{error}</p> : null}
 
       <section className="panel-accent">
-        <h2 className="mb-2 text-lg font-semibold">Созданные курсы/разделы/уроки</h2>
+        <h2 className="mb-2 text-lg font-semibold">Созданные курсы/разделы/уроки/задания</h2>
         {courses.length === 0 ? <p className="text-sm text-slate-500">Пока нет созданных курсов.</p> : null}
 
         <ul className="space-y-3">
@@ -468,7 +722,7 @@ export function AdminCourseManager({
                   {relatedSections.length === 0 ? <p className="text-sm text-slate-500">Разделы пока не добавлены.</p> : null}
 
                   {relatedSections.map((section) => {
-                    const relatedLessons = lessons.filter((lesson) => lesson.sectionId === section.id);
+                    const relatedLessons = lessonsBySection[section.id] ?? [];
 
                     return (
                       <div key={section.id} className="rounded-md border border-sky-100 bg-white p-2">
@@ -487,24 +741,73 @@ export function AdminCourseManager({
                         {relatedLessons.length === 0 ? (
                           <p className="mt-1 text-xs text-slate-500">Уроки пока не добавлены.</p>
                         ) : (
-                          <ul className="mt-1 space-y-1 text-sm text-slate-700">
-                            {relatedLessons.map((lesson) => (
-                              <li key={lesson.id} className="rounded border border-sky-100 bg-sky-50/40 p-2">
-                                <div className="flex items-center justify-between gap-2">
-                                  <span>
-                                    Урок: {lesson.title} (<code>{lesson.id}</code>)
-                                  </span>
-                                  <div className="flex gap-2">
-                                    <button type="button" className="btn-ghost px-2 py-1 text-xs" onClick={() => void editLesson(lesson)}>
-                                      Редактировать
-                                    </button>
-                                    <button type="button" className="btn-danger px-2 py-1 text-xs" onClick={() => void deleteLesson(lesson)}>
-                                      Удалить
-                                    </button>
+                          <ul className="mt-1 space-y-2 text-sm text-slate-700">
+                            {relatedLessons.map((lesson) => {
+                              const relatedTasks = tasksByLesson[lesson.id] ?? [];
+
+                              return (
+                                <li key={lesson.id} className="rounded border border-sky-100 bg-sky-50/40 p-2">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span>
+                                      Урок: {lesson.title} (<code>{lesson.id}</code>)
+                                    </span>
+                                    <div className="flex gap-2">
+                                      <button
+                                        type="button"
+                                        className="btn-ghost px-2 py-1 text-xs"
+                                        onClick={() => void editLesson(lesson)}
+                                      >
+                                        Редактировать
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn-danger px-2 py-1 text-xs"
+                                        onClick={() => void deleteLesson(lesson)}
+                                      >
+                                        Удалить
+                                      </button>
+                                    </div>
                                   </div>
-                                </div>
-                              </li>
-                            ))}
+
+                                  <div className="mt-2 space-y-2">
+                                    {relatedTasks.length === 0 ? (
+                                      <p className="text-xs text-slate-500">Задания пока не добавлены.</p>
+                                    ) : (
+                                      relatedTasks.map((task) => (
+                                        <div key={task.id} className="rounded border border-sky-200 bg-white p-2">
+                                          <div className="flex items-center justify-between gap-2">
+                                            <p className="text-xs text-slate-500">
+                                              {task.type === "numeric" ? "Числовой ответ" : "Выбор варианта"}
+                                            </p>
+                                            <div className="flex gap-2">
+                                              <button
+                                                type="button"
+                                                className="btn-ghost px-2 py-1 text-xs"
+                                                onClick={() => void editTask(task)}
+                                              >
+                                                Редактировать
+                                              </button>
+                                              <button
+                                                type="button"
+                                                className="btn-danger px-2 py-1 text-xs"
+                                                onClick={() => void deleteTask(task)}
+                                              >
+                                                Удалить
+                                              </button>
+                                            </div>
+                                          </div>
+                                          <p className="text-sm font-medium">{task.question}</p>
+                                          {task.options?.length ? (
+                                            <p className="text-xs text-slate-600">Варианты: {task.options.join(", ")}</p>
+                                          ) : null}
+                                          <p className="text-xs text-slate-600">Ответ: {task.answer}</p>
+                                        </div>
+                                      ))
+                                    )}
+                                  </div>
+                                </li>
+                              );
+                            })}
                           </ul>
                         )}
                       </div>
@@ -515,6 +818,22 @@ export function AdminCourseManager({
             );
           })}
         </ul>
+      </section>
+
+      <section className="panel-accent">
+        <h2 className="mb-2 text-lg font-semibold">Пользователи</h2>
+        {users.length === 0 ? (
+          <p className="text-sm text-slate-500">Пока пользователей нет.</p>
+        ) : (
+          <ul className="space-y-2 text-sm">
+            {users.map((user) => (
+              <li key={user.id} className="rounded-md border border-sky-100 bg-sky-50/30 p-2">
+                <p className="font-medium">{user.email}</p>
+                <p className="text-xs text-slate-500">Роль: {user.role}</p>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </div>
   );
