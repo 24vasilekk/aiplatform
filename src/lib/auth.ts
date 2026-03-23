@@ -42,6 +42,20 @@ export async function getCurrentUser() {
 
   try {
     const payload = await verifyAuthToken(token);
+
+    // Temporary fallback admin account for environments without persistent DB.
+    if (
+      payload.sub === "builtin-admin" &&
+      payload.email === "admin@ege.local" &&
+      payload.role === "admin"
+    ) {
+      return {
+        id: "builtin-admin",
+        email: "admin@ege.local",
+        role: "admin" as const,
+      };
+    }
+
     const user = await findUserById(payload.sub);
     if (!user) return null;
 

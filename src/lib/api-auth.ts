@@ -10,6 +10,22 @@ export async function requireUser(request: NextRequest) {
 
   try {
     const payload = await verifyAuthToken(token);
+
+    if (
+      payload.sub === "builtin-admin" &&
+      payload.email === "admin@ege.local" &&
+      payload.role === "admin"
+    ) {
+      return {
+        user: {
+          id: "builtin-admin",
+          email: "admin@ege.local",
+          role: "admin" as const,
+        },
+        error: null,
+      };
+    }
+
     const user = await findUserById(payload.sub);
     if (!user) {
       return { user: null, error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };

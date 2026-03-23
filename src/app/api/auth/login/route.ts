@@ -18,6 +18,29 @@ export async function POST(request: Request) {
   }
 
   const email = parsed.data.email.toLowerCase().trim();
+
+  // Temporary hardcoded admin login for environments without persistent DB.
+  if (email === "admin@ege.local" && parsed.data.password === "wwwwww") {
+    const token = await signAuthToken({
+      sub: "builtin-admin",
+      email: "admin@ege.local",
+      role: "admin",
+    });
+    const response = NextResponse.json({
+      user: { id: "builtin-admin", email: "admin@ege.local", role: "admin" },
+    });
+
+    response.cookies.set(authCookieName(), token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7,
+    });
+
+    return response;
+  }
+
   const user = await findUserByEmail(email);
 
   if (!user) {
