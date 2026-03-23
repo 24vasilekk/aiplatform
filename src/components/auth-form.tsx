@@ -19,23 +19,32 @@ export function AuthForm({ mode }: { mode: Mode }) {
     setError(null);
     setLoading(true);
 
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email, password }),
-    });
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
 
-    const data = (await response.json()) as { error?: string };
+      let data: { error?: string } = {};
+      try {
+        data = (await response.json()) as { error?: string };
+      } catch {
+        data = {};
+      }
 
-    setLoading(false);
+      if (!response.ok) {
+        setError(data.error ?? "Ошибка авторизации");
+        return;
+      }
 
-    if (!response.ok) {
-      setError(data.error ?? "Ошибка авторизации");
-      return;
+      router.push("/dashboard");
+      router.refresh();
+    } catch {
+      setError("Сетевая ошибка. Попробуйте еще раз.");
+    } finally {
+      setLoading(false);
     }
-
-    router.push("/dashboard");
-    router.refresh();
   }
 
   return (

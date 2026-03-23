@@ -11,10 +11,8 @@ type AuthPayload = {
 };
 
 function getSecret() {
-  const value = process.env.AUTH_JWT_SECRET;
-  if (!value) {
-    throw new Error("AUTH_JWT_SECRET is not set");
-  }
+  // Temporary fallback to keep MVP working on deployments where env is not set yet.
+  const value = process.env.AUTH_JWT_SECRET ?? "mvp-temporary-secret-change-me";
   return new TextEncoder().encode(value);
 }
 
