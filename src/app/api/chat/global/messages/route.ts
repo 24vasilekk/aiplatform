@@ -15,13 +15,18 @@ export async function GET(request: NextRequest) {
     return auth.error;
   }
 
-  const messages = await listChatMessages({
-    userId: auth.user.id,
-    chatType: "global",
-    lessonId: null,
-  });
+  try {
+    const messages = await listChatMessages({
+      userId: auth.user.id,
+      chatType: "global",
+      lessonId: null,
+    });
 
-  return NextResponse.json(messages);
+    return NextResponse.json(messages);
+  } catch {
+    // On serverless environments without writable fs, chat history may be unavailable.
+    return NextResponse.json([]);
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -36,29 +41,40 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Пустое сообщение" }, { status: 400 });
   }
 
-  await addChatMessage({
-    userId: auth.user.id,
-    chatType: "global",
-    lessonId: null,
-    role: "user",
-    content: parsed.data.message,
-    mode: parsed.data.mode,
-  });
-
   const aiReply = await generateAiReply({
     message: parsed.data.message,
     mode: parsed.data.mode,
     context: "global-ege-chat",
   });
 
-  const assistant = await addChatMessage({
-    userId: auth.user.id,
-    chatType: "global",
-    lessonId: null,
-    role: "assistant",
-    content: aiReply,
-    mode: parsed.data.mode,
-  });
+  try {
+    await addChatMessage({
+      userId: auth.user.id,
+      chatType: "global",
+      lessonId: null,
+      role: "user",
+      content: parsed.data.message,
+      mode: parsed.data.mode,
+    });
 
-  return NextResponse.json({ reply: assistant.content, message: assistant });
+    const assistant = await addChatMessage({
+      userId: auth.user.id,
+      chatType: "global",
+      lessonId: null,
+      role: "assistant",
+      content: aiReply,
+      mode: parsed.data.mode,
+    });
+
+    return NextResponse.json({ reply: assistant.content, message: assistant });
+  } catch {
+    const message = {
+      id: `transient-${Date.now()}`,
+      role: "assistant" as const,
+      content: aiReply,
+      mode: parsed.data.mode,
+      createdAt: new Date().toISOString(),
+    };
+    return NextResponse.json({ reply: message.content, message });
+  }
 }

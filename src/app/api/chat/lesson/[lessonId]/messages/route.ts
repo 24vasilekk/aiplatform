@@ -19,13 +19,17 @@ export async function GET(
   }
 
   const { lessonId } = await params;
-  const messages = await listChatMessages({
-    userId: auth.user.id,
-    chatType: "lesson",
-    lessonId,
-  });
+  try {
+    const messages = await listChatMessages({
+      userId: auth.user.id,
+      chatType: "lesson",
+      lessonId,
+    });
 
-  return NextResponse.json(messages);
+    return NextResponse.json(messages);
+  } catch {
+    return NextResponse.json([]);
+  }
 }
 
 export async function POST(
@@ -44,29 +48,40 @@ export async function POST(
     return NextResponse.json({ error: "Пустое сообщение" }, { status: 400 });
   }
 
-  await addChatMessage({
-    userId: auth.user.id,
-    chatType: "lesson",
-    lessonId,
-    role: "user",
-    content: parsed.data.message,
-    mode: parsed.data.mode,
-  });
-
   const aiReply = await generateAiReply({
     message: parsed.data.message,
     mode: parsed.data.mode,
     context: `lesson:${lessonId}`,
   });
 
-  const assistant = await addChatMessage({
-    userId: auth.user.id,
-    chatType: "lesson",
-    lessonId,
-    role: "assistant",
-    content: aiReply,
-    mode: parsed.data.mode,
-  });
+  try {
+    await addChatMessage({
+      userId: auth.user.id,
+      chatType: "lesson",
+      lessonId,
+      role: "user",
+      content: parsed.data.message,
+      mode: parsed.data.mode,
+    });
 
-  return NextResponse.json({ reply: assistant.content, message: assistant });
+    const assistant = await addChatMessage({
+      userId: auth.user.id,
+      chatType: "lesson",
+      lessonId,
+      role: "assistant",
+      content: aiReply,
+      mode: parsed.data.mode,
+    });
+
+    return NextResponse.json({ reply: assistant.content, message: assistant });
+  } catch {
+    const message = {
+      id: `transient-${Date.now()}`,
+      role: "assistant" as const,
+      content: aiReply,
+      mode: parsed.data.mode,
+      createdAt: new Date().toISOString(),
+    };
+    return NextResponse.json({ reply: message.content, message });
+  }
 }
