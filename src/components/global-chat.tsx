@@ -73,7 +73,7 @@ export function GlobalChat() {
           Похожая задача
         </button>
       </div>
-      <div className="max-h-[420px] space-y-2 overflow-y-auto rounded-xl border border-sky-200 bg-white p-4">
+      <div className="max-h-[320px] space-y-2 overflow-y-auto rounded-xl border border-sky-200 bg-white p-3 sm:max-h-[420px] sm:p-4">
         {messages.length === 0 ? <p className="text-sm text-slate-500">Напишите первый вопрос.</p> : null}
         {messages.map((item) => (
           <div
@@ -88,7 +88,7 @@ export function GlobalChat() {
           </div>
         ))}
       </div>
-      <textarea rows={5} className="w-full" value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Спросите что угодно по ЕГЭ" />
+      <textarea rows={4} className="w-full" value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Спросите что угодно по ЕГЭ" />
       <button type="button" onClick={send} disabled={loading}>
         {loading ? "Отправка..." : "Отправить"}
       </button>

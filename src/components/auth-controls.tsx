@@ -10,7 +10,7 @@ type User = {
   role: "student" | "admin";
 };
 
-export function AuthControls() {
+export function AuthControls({ mobile = false }: { mobile?: boolean }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -39,11 +39,14 @@ export function AuthControls() {
 
   if (!user) {
     return (
-      <div className="flex items-center gap-2">
-        <Link href="/login" className="btn-ghost">
+      <div className={mobile ? "grid gap-2" : "flex flex-wrap items-center gap-2 md:flex-nowrap"}>
+        <Link href="/login" className={mobile ? "btn-ghost w-full px-3 py-2 text-center" : "btn-ghost px-3 py-1.5 md:px-3 md:py-2"}>
           Войти
         </Link>
-        <Link href="/register" className="btn-primary">
+        <Link
+          href="/register"
+          className={mobile ? "btn-primary w-full px-3 py-2 text-center" : "btn-primary px-3 py-1.5 md:px-3 md:py-2"}
+        >
           Регистрация
         </Link>
       </div>
@@ -51,8 +54,8 @@ export function AuthControls() {
   }
 
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs text-slate-500">{user.email}</span>
+    <div className={mobile ? "grid gap-2" : "flex flex-wrap items-center gap-2 md:flex-nowrap"}>
+      <span className={mobile ? "text-xs text-slate-500" : "max-w-[180px] truncate text-xs text-slate-500"}>{user.email}</span>
       <button type="button" onClick={logout} className="btn-ghost px-2 py-1 text-xs">
         Выйти
       </button>

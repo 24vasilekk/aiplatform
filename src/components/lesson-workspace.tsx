@@ -182,7 +182,7 @@ export function LessonWorkspace({
             </button>
           ))}
         </div>
-        <div className="max-h-[280px] space-y-2 overflow-y-auto rounded-lg border border-sky-200 p-2 text-sm">
+        <div className="max-h-[240px] space-y-2 overflow-y-auto rounded-lg border border-sky-200 p-2 text-sm sm:max-h-[280px]">
           {messages.length === 0 ? <p className="text-slate-500">Задайте первый вопрос.</p> : null}
           {messages.map((item) => (
             <div
@@ -198,7 +198,7 @@ export function LessonWorkspace({
           ))}
         </div>
         <textarea
-          rows={5}
+          rows={4}
           className="w-full"
           placeholder="Задайте вопрос AI по теме урока"
           value={message}
