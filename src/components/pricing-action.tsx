@@ -12,18 +12,28 @@ export function PricingAction() {
     setLoading(true);
     setStatus(null);
 
-    const response = await fetch("/api/billing/create-checkout", { method: "POST" });
-    const data = (await response.json()) as { message?: string; error?: string };
+    try {
+      const response = await fetch("/api/billing/create-checkout", { method: "POST" });
 
-    setLoading(false);
+      let data: { message?: string; error?: string } = {};
+      try {
+        data = (await response.json()) as { message?: string; error?: string };
+      } catch {
+        data = {};
+      }
 
-    if (!response.ok) {
-      setStatus(data.error ?? "Ошибка оплаты");
-      return;
+      if (!response.ok) {
+        setStatus(data.error ?? "Ошибка оплаты");
+        return;
+      }
+
+      setStatus(data.message ?? "Оплата выполнена");
+      router.refresh();
+    } catch {
+      setStatus("Сетевая ошибка. Попробуйте еще раз.");
+    } finally {
+      setLoading(false);
     }
-
-    setStatus(data.message ?? "Оплата выполнена");
-    router.refresh();
   }
 
   return (

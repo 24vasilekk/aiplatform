@@ -9,13 +9,24 @@ export async function POST(request: NextRequest) {
     return auth.error;
   }
 
-  const courses = await listAllCourses();
-  await Promise.all(
-    courses.map((course) => grantCourseAccess(auth.user!.id, course.id, "subscription")),
-  );
+  try {
+    const courses = await listAllCourses();
+    await Promise.all(
+      courses.map((course) => grantCourseAccess(auth.user!.id, course.id, "subscription")),
+    );
 
-  return NextResponse.json({
-    ok: true,
-    message: "Демо-оплата прошла успешно. Доступ к курсам открыт.",
-  });
+    return NextResponse.json({
+      ok: true,
+      message: "Демо-оплата прошла успешно. Доступ к курсам открыт.",
+    });
+  } catch {
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          "Не удалось сохранить оплату в текущем окружении. Для Vercel нужна внешняя БД (Neon/Supabase/Postgres).",
+      },
+      { status: 500 },
+    );
+  }
 }
