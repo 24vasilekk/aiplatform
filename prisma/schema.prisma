@@ -1,0 +1,99 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String           @id @default(cuid())
+  email           String           @unique
+  passwordHash    String
+  role            UserRole         @default(STUDENT)
+  createdAt       DateTime         @default(now())
+  accesses        CourseAccess[]
+  lessonProgress  LessonProgress[]
+  taskAttempts    TaskAttempt[]
+  chatSessions    ChatSession[]
+}
+
+model CourseAccess {
+  id         String   @id @default(cuid())
+  userId     String
+  courseId   String
+  accessType String   @default("trial")
+  expiresAt  DateTime?
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+}
+
+model LessonProgress {
+  id              String         @id @default(cuid())
+  userId          String
+  lessonId        String
+  status          ProgressStatus @default(NOT_STARTED)
+  lastPositionSec Int            @default(0)
+  updatedAt       DateTime       @updatedAt
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+}
+
+model TaskAttempt {
+  id         String   @id @default(cuid())
+  userId     String
+  taskId     String
+  answerText String
+  isCorrect  Boolean?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ChatSession {
+  id        String      @id @default(cuid())
+  userId    String
+  chatType  ChatType
+  lessonId  String?
+  createdAt DateTime    @default(now())
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  ChatMessage[]
+
+  @@index([userId, chatType, lessonId])
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  chatId    String
+  role      ChatRole
+  content   String
+  mode      String   @default("default")
+  createdAt DateTime @default(now())
+  chat      ChatSession @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId, createdAt])
+}
+
+enum UserRole {
+  STUDENT
+  ADMIN
+}
+
+enum ProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum ChatType {
+  LESSON
+  GLOBAL
+}
+
+enum ChatRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}

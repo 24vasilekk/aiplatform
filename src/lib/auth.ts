@@ -1,0 +1,56 @@
+import { cookies } from "next/headers";
+import { jwtVerify, SignJWT } from "jose";
+import { findUserById, type UserRole } from "@/lib/db";
+
+const AUTH_COOKIE = "ege_auth";
+
+type AuthPayload = {
+  sub: string;
+  email: string;
+  role: UserRole;
+};
+
+function getSecret() {
+  const value = process.env.AUTH_JWT_SECRET;
+  if (!value) {
+    throw new Error("AUTH_JWT_SECRET is not set");
+  }
+  return new TextEncoder().encode(value);
+}
+
+export async function signAuthToken(payload: AuthPayload) {
+  return new SignJWT(payload)
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("7d")
+    .sign(getSecret());
+}
+
+export async function verifyAuthToken(token: string) {
+  const result = await jwtVerify<AuthPayload>(token, getSecret());
+  return result.payload;
+}
+
+export function authCookieName() {
+  return AUTH_COOKIE;
+}
+
+export async function getCurrentUser() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(AUTH_COOKIE)?.value;
+  if (!token) return null;
+
+  try {
+    const payload = await verifyAuthToken(token);
+    const user = await findUserById(payload.sub);
+    if (!user) return null;
+
+    return {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+    };
+  } catch {
+    return null;
+  }
+}

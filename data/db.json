@@ -1,0 +1,400 @@
+{
+  "users": [
+    {
+      "id": "usr_25794785-1bfd-4b58-a48d-6848df0978bc",
+      "email": "shsh@gmail.com",
+      "passwordHash": "$2b$10$AlV2xgE3pBoyy0tPWgv1..bSmxJFJvF2chlO.9H9f8FBpdUuHwk0K",
+      "role": "student",
+      "createdAt": "2026-03-23T00:52:53.253Z"
+    },
+    {
+      "id": "usr_f0bb3e6c-1899-45fb-9d6f-81601aa89513",
+      "email": "vvv@gmail.com",
+      "passwordHash": "$2b$10$Zwcwcpfuts01rWLRFCJqHeZXBoaI2FUm4l3wqGUm7SXsrV40Ajjsy",
+      "role": "student",
+      "createdAt": "2026-03-23T00:55:41.478Z"
+    },
+    {
+      "id": "usr_5a52de00-8ea1-40e1-b703-1ae30784812b",
+      "email": "admin@ege.local",
+      "passwordHash": "$2b$10$3RxV5vVOX9qGDexqtjYKsOryNk104U/R4f4.FJrV2mYklRmspfHEK",
+      "role": "admin",
+      "createdAt": "2026-03-23T01:00:08.684Z"
+    }
+  ],
+  "courseAccesses": [
+    {
+      "id": "acc_773c56a9-b870-4acb-80de-6439e44f7ab5",
+      "userId": "usr_25794785-1bfd-4b58-a48d-6848df0978bc",
+      "courseId": "math-base",
+      "accessType": "trial",
+      "expiresAt": null
+    },
+    {
+      "id": "acc_a61782ee-9619-417a-934c-4c9b67b76f71",
+      "userId": "usr_25794785-1bfd-4b58-a48d-6848df0978bc",
+      "courseId": "physics-base",
+      "accessType": "subscription",
+      "expiresAt": null
+    },
+    {
+      "id": "acc_c747eaf2-93cf-4d77-8459-89500d194316",
+      "userId": "usr_f0bb3e6c-1899-45fb-9d6f-81601aa89513",
+      "courseId": "math-base",
+      "accessType": "trial",
+      "expiresAt": null
+    },
+    {
+      "id": "acc_a19834d0-2ae3-4eb6-934d-cc468d9cbf04",
+      "userId": "usr_f0bb3e6c-1899-45fb-9d6f-81601aa89513",
+      "courseId": "physics-base",
+      "accessType": "subscription",
+      "expiresAt": null
+    },
+    {
+      "id": "acc_7a657e9d-deec-4bd4-964d-bed8713de5ae",
+      "userId": "usr_5a52de00-8ea1-40e1-b703-1ae30784812b",
+      "courseId": "math-base",
+      "accessType": "trial",
+      "expiresAt": null
+    },
+    {
+      "id": "acc_f02eb096-8e67-4aad-978e-b2280a1ca0d4",
+      "userId": "usr_5a52de00-8ea1-40e1-b703-1ae30784812b",
+      "courseId": "physics-base",
+      "accessType": "subscription",
+      "expiresAt": null
+    },
+    {
+      "id": "acc_82c3766f-7486-4a61-b572-2f5fba3de33b",
+      "userId": "usr_5a52de00-8ea1-40e1-b703-1ae30784812b",
+      "courseId": "custom-course_b286e4ce-1205-4548-a154-90a2107c3e65",
+      "accessType": "subscription",
+      "expiresAt": null
+    }
+  ],
+  "lessonProgress": [
+    {
+      "id": "prg_88bef5aa-31e2-4772-8c6d-cfb1e75c55eb",
+      "userId": "usr_25794785-1bfd-4b58-a48d-6848df0978bc",
+      "lessonId": "lesson-math-1",
+      "status": "in_progress",
+      "lastPositionSec": 0,
+      "updatedAt": "2026-03-23T00:53:05.690Z"
+    },
+    {
+      "id": "prg_1c9c8dc4-f54a-426a-bd01-0e2e7c6f31fb",
+      "userId": "usr_25794785-1bfd-4b58-a48d-6848df0978bc",
+      "lessonId": "lesson-phys-1",
+      "status": "in_progress",
+      "lastPositionSec": 0,
+      "updatedAt": "2026-03-23T00:54:41.545Z"
+    },
+    {
+      "id": "prg_702b3e2b-bf08-41ee-9f5b-f853d0c3f057",
+      "userId": "usr_f0bb3e6c-1899-45fb-9d6f-81601aa89513",
+      "lessonId": "lesson-phys-1",
+      "status": "in_progress",
+      "lastPositionSec": 0,
+      "updatedAt": "2026-03-23T00:55:49.915Z"
+    },
+    {
+      "id": "prg_1d9c109c-a586-4e07-a572-ceb31b8540c1",
+      "userId": "usr_f0bb3e6c-1899-45fb-9d6f-81601aa89513",
+      "lessonId": "lesson-math-3",
+      "status": "in_progress",
+      "lastPositionSec": 0,
+      "updatedAt": "2026-03-23T00:57:06.420Z"
+    },
+    {
+      "id": "prg_993f0955-7182-4313-a688-3dd22cb0767f",
+      "userId": "usr_5a52de00-8ea1-40e1-b703-1ae30784812b",
+      "lessonId": "lesson-math-1",
+      "status": "in_progress",
+      "lastPositionSec": 0,
+      "updatedAt": "2026-03-23T01:29:35.228Z"
+    },
+    {
+      "id": "prg_163a4266-59e4-48a4-b05f-f00c07b8b2cf",
+      "userId": "usr_5a52de00-8ea1-40e1-b703-1ae30784812b",
+      "lessonId": "custom-lesson_1c08ffcc-f42d-481e-8045-d09ebca9f9e3",
+      "status": "in_progress",
+      "lastPositionSec": 0,
+      "updatedAt": "2026-03-23T01:25:00.652Z"
+    },
+    {
+      "id": "prg_d2919301-d957-4b1d-b919-bf666e6f460c",
+      "userId": "usr_5a52de00-8ea1-40e1-b703-1ae30784812b",
+      "lessonId": "custom-lesson_37eac37e-183a-40da-b9ae-215eb98a45a3",
+      "status": "in_progress",
+      "lastPositionSec": 0,
+      "updatedAt": "2026-03-23T01:21:15.561Z"
+    }
+  ],
+  "taskAttempts": [
+    {
+      "id": "att_31b52f7d-c30f-4678-9add-017582604ecb",
+      "userId": "usr_5a52de00-8ea1-40e1-b703-1ae30784812b",
+      "taskId": "task-1",
+      "answerText": "2",
+      "isCorrect": true,
+      "createdAt": "2026-03-23T01:03:37.749Z"
+    }
+  ],
+  "chatSessions": [
+    {
+      "id": "chat_a7750184-7e69-4cef-ae9e-45c7d22dcbce",
+      "userId": "usr_25794785-1bfd-4b58-a48d-6848df0978bc",
+      "chatType": "lesson",
+      "lessonId": "lesson-math-1",
+      "createdAt": "2026-03-23T00:53:06.276Z",
+      "messages": [
+        {
+          "id": "msg_dfb3d946-08fe-4e98-b568-4e8a84999d6d",
+          "role": "user",
+          "content": "привет",
+          "mode": "default",
+          "createdAt": "2026-03-23T00:53:26.612Z"
+        },
+        {
+          "id": "msg_03a77b62-c4a3-4a6e-89cd-8be8a21d9820",
+          "role": "assistant",
+          "content": "Разберем: привет. Начни с записи известных данных и цели задачи.",
+          "mode": "default",
+          "createdAt": "2026-03-23T00:53:26.613Z"
+        }
+      ]
+    },
+    {
+      "id": "chat_0c01d851-6ab2-410c-9f03-036114889d54",
+      "userId": "usr_25794785-1bfd-4b58-a48d-6848df0978bc",
+      "chatType": "global",
+      "lessonId": null,
+      "createdAt": "2026-03-23T00:53:42.011Z",
+      "messages": [
+        {
+          "id": "msg_04e320f4-944d-4cae-b4a7-85b6e073cfd6",
+          "role": "user",
+          "content": "привет",
+          "mode": "default",
+          "createdAt": "2026-03-23T00:53:46.917Z"
+        },
+        {
+          "id": "msg_8b0b997e-a051-45a9-a2d3-15fe97bf2e2c",
+          "role": "assistant",
+          "content": "Разберем: привет. Начни с записи известных данных и цели задачи.",
+          "mode": "default",
+          "createdAt": "2026-03-23T00:53:46.918Z"
+        }
+      ]
+    },
+    {
+      "id": "chat_53083948-9e2f-479d-984a-21e3ed698eab",
+      "userId": "usr_25794785-1bfd-4b58-a48d-6848df0978bc",
+      "chatType": "lesson",
+      "lessonId": "lesson-phys-1",
+      "createdAt": "2026-03-23T00:54:41.561Z",
+      "messages": []
+    },
+    {
+      "id": "chat_453cf95e-0497-4172-a13c-a98b711e1a0d",
+      "userId": "usr_f0bb3e6c-1899-45fb-9d6f-81601aa89513",
+      "chatType": "lesson",
+      "lessonId": "lesson-phys-1",
+      "createdAt": "2026-03-23T00:55:49.944Z",
+      "messages": [
+        {
+          "id": "msg_e0bf6fb3-7ed5-449f-ab1e-2f964b480f27",
+          "role": "user",
+          "content": "объясни как для новичка",
+          "mode": "beginner",
+          "createdAt": "2026-03-23T00:56:06.784Z"
+        },
+        {
+          "id": "msg_44201f12-ec05-4176-a7ee-1db4eaccb3e7",
+          "role": "assistant",
+          "content": "Объясняю просто: объясни как для новичка. 1) Определи данные. 2) Выбери формулу. 3) Подставь и проверь ответ.",
+          "mode": "beginner",
+          "createdAt": "2026-03-23T00:56:06.786Z"
+        }
+      ]
+    },
+    {
+      "id": "chat_37491433-3fe1-4556-8d62-c3af09bb3cb3",
+      "userId": "usr_f0bb3e6c-1899-45fb-9d6f-81601aa89513",
+      "chatType": "global",
+      "lessonId": null,
+      "createdAt": "2026-03-23T00:56:45.136Z",
+      "messages": []
+    },
+    {
+      "id": "chat_31d5f58c-af66-4def-9a85-e5127c23dada",
+      "userId": "usr_f0bb3e6c-1899-45fb-9d6f-81601aa89513",
+      "chatType": "lesson",
+      "lessonId": "lesson-math-3",
+      "createdAt": "2026-03-23T00:57:06.480Z",
+      "messages": []
+    },
+    {
+      "id": "chat_7742d98f-3fe6-4145-818a-87bcbd443e6c",
+      "userId": "usr_5a52de00-8ea1-40e1-b703-1ae30784812b",
+      "chatType": "lesson",
+      "lessonId": "lesson-math-1",
+      "createdAt": "2026-03-23T01:01:45.699Z",
+      "messages": [
+        {
+          "id": "msg_7a8d94b3-ddaf-4dd7-b896-fe81895c7a98",
+          "role": "user",
+          "content": "hello",
+          "mode": "default",
+          "createdAt": "2026-03-23T01:01:52.275Z"
+        },
+        {
+          "id": "msg_bc741549-b733-4684-a3cd-920c45e03da6",
+          "role": "assistant",
+          "content": "Здравствуйте! Как я могу помочь вам сегодня? Если у вас есть вопросы по математике или физике, не стесняйтесь задавать их.",
+          "mode": "default",
+          "createdAt": "2026-03-23T01:01:54.398Z"
+        },
+        {
+          "id": "msg_c09f6922-c8b7-42d3-8361-452df081b599",
+          "role": "user",
+          "content": "есть вопрос по математике",
+          "mode": "default",
+          "createdAt": "2026-03-23T01:02:09.012Z"
+        },
+        {
+          "id": "msg_5d843e70-173b-46fd-a580-25a312aa5096",
+          "role": "assistant",
+          "content": "Конечно! Какой у вас вопрос по математике? Пожалуйста, опишите его как можно подробнее, чтобы я мог помочь вам наиболее эффективно.",
+          "mode": "default",
+          "createdAt": "2026-03-23T01:02:10.923Z"
+        },
+        {
+          "id": "msg_82967660-a9f7-40b0-98ac-544ed2ffb6fe",
+          "role": "user",
+          "content": "логарифмы",
+          "mode": "default",
+          "createdAt": "2026-03-23T01:02:18.501Z"
+        },
+        {
+          "id": "msg_91a56e5e-92ca-493a-888b-b5e4b67f4cd4",
+          "role": "assistant",
+          "content": "Логарифмы — это важная тема в математике, которая часто встречается в экзаменах, таких как ЕГЭ. Давайте разберем основные понятия и свойства логарифмов.\n\n### Определение логарифма\nЛогарифм числа \\( a \\) по основанию \\( b \\) (где \\( b > 0 \\) и \\( b \\neq 1 \\)) — это такое число \\( x \\), что:\n\\[\nb^x = a\n\\]\nОбозначается это как:\n\\[\n\\log_b(a) = x\n\\]\n\n### Основные свойства логарифмов\n1. **Логарифм произведения**:\n   \\[\n   \\log_b(m \\cdot n) = \\log_b(m) + \\log_b(n)\n   \\]\n2. **Логарифм частного**:\n   \\[\n   \\log_b\\left(\\frac{m}{n}\\right) = \\log_b(m) - \\log_b(n)\n   \\]\n3. **Логарифм степени**:\n   \\[\n   \\log_b(m^k) = k \\cdot \\log_b(m)\n   \\]\n4. **Логарифм единицы**:\n   \\[\n   \\log_b(1) = 0\n   \\]\n5. **Логарифм основания**:\n   \\[\n   \\log_b(b) = 1\n   \\]\n\n### Изменение основания логарифма\nЕсли нужно изменить основание логарифма, используется следующая формула:\n\\[\n\\log_b(a) = \\frac{\\log_k(a)}{\\log_k(b)}\n\\]\nгде \\( k \\) — любое положительное число, отличное от 1.\n\n### Примеры\n1. **Пример 1**: Найдите \\( \\log_2(8) \\).\n   \\[\n   2^x = 8 \\implies 2^x = 2^3 \\implies x = 3 \\implies \\log_2(8) = 3\n   \\]\n\n2. **Пример 2**: Используя свойства логарифмов, упростите \\( \\log_3(9) + \\log_3(27) \\).\n   \\[\n   \\log_3(9) = \\log_3(3^2) = 2 \\quad \\text{и} \\quad \\log_3(27) = \\log_3(3^3) = 3\n   \\]\n   \\[\n   \\log_3(9) + \\log_3(27) = 2 + 3 = 5\n   \\]\n\n### Задачи на применение логарифмов\n1. Решите уравнение: \\( \\log_2(x) + \\log_2(x - 2) = 1 \\).\n2. Найдите значение \\( x \\), если \\( \\log_5(x) = 2 \\).\n\n### Заключение\nЛогарифмы являются мощным инструментом для решения различных математических задач. Убедитесь, что вы понимаете их свойства и умеете применять их на практике. Если у вас есть вопросы или вам нужно больше примеров, не стесняйтесь спрашивать!",
+          "mode": "default",
+          "createdAt": "2026-03-23T01:02:34.653Z"
+        },
+        {
+          "id": "msg_2a645aff-50da-43c6-97b9-55610d5ff0f7",
+          "role": "user",
+          "content": "Помоги решить задачу: Решите x^2 - 5x + 6 = 0. Введите меньший корень.",
+          "mode": "beginner",
+          "createdAt": "2026-03-23T01:02:47.032Z"
+        },
+        {
+          "id": "msg_bd837c28-ab25-4e9d-aaa6-3d8d08513d69",
+          "role": "assistant",
+          "content": "Чтобы решить уравнение \\(x^2 - 5x + 6 = 0\\), следуй этим шагам:\n\n1. **Найди коэффициенты**: В нашем уравнении \\(a = 1\\), \\(b = -5\\), \\(c = 6\\).\n\n2. **Используй формулу дискриминанта**: \n   \\[\n   D = b^2 - 4ac\n   \\]\n   Подставь значения:\n   \\[\n   D = (-5)^2 - 4 \\cdot 1 \\cdot 6 = 25 - 24 = 1\n   \\]\n\n3. **Найди корни уравнения**: Используй формулу корней:\n   \\[\n   x_{1,2} = \\frac{-b \\pm \\sqrt{D}}{2a}\n   \\]\n   Подставь значения:\n   \\[\n   x_{1,2} = \\frac{-(-5) \\pm \\sqrt{1}}{2 \\cdot 1} = \\frac{5 \\pm 1}{2}\n   \\]\n\n4. **Посчитай корни**:\n   - Первый корень:\n     \\[\n     x_1 = \\frac{5 + 1}{2} = \\frac{6}{2} = 3\n     \\]\n   - Второй корень:\n     \\[\n     x_2 = \\frac{5 - 1}{2} = \\frac{4}{2} = 2\n     \\]\n\n5. **Выбери меньший корень**: Меньший корень — это \\(2\\).\n\nОтвет: **2**.",
+          "mode": "beginner",
+          "createdAt": "2026-03-23T01:02:54.279Z"
+        },
+        {
+          "id": "msg_2963fbdf-076d-4ee8-a6c8-84666d0155aa",
+          "role": "user",
+          "content": "Помоги решить задачу: Решите x^2 - 5x + 6 = 0. Введите меньший корень.",
+          "mode": "beginner",
+          "createdAt": "2026-03-23T01:03:11.034Z"
+        },
+        {
+          "id": "msg_9833bb5a-134c-4db1-bc9d-4a173500c00a",
+          "role": "assistant",
+          "content": "Чтобы решить уравнение \\(x^2 - 5x + 6 = 0\\), следуй этим шагам:\n\n1. **Определим коэффициенты**: \n   - \\(a = 1\\) (коэффициент перед \\(x^2\\)),\n   - \\(b = -5\\) (коэффициент перед \\(x\\)),\n   - \\(c = 6\\) (свободный член).\n\n2. **Найдем дискриминант** по формуле:\n   \\[\n   D = b^2 - 4ac\n   \\]\n   Подставим значения:\n   \\[\n   D = (-5)^2 - 4 \\cdot 1 \\cdot 6 = 25 - 24 = 1\n   \\]\n\n3. **Найдем корни уравнения** по формуле:\n   \\[\n   x_1 = \\frac{-b + \\sqrt{D}}{2a}, \\quad x_2 = \\frac{-b - \\sqrt{D}}{2a}\n   \\]\n   Подставим значения:\n   \\[\n   x_1 = \\frac{5 + 1}{2 \\cdot 1} = \\frac{6}{2} = 3\n   \\]\n   \\[\n   x_2 = \\frac{5 - 1}{2 \\cdot 1} = \\frac{4}{2} = 2\n   \\]\n\n4. **Ответ**: Меньший корень — это \\(2\\).\n\nТаким образом, меньший корень уравнения \\(x^2 - 5x + 6 = 0\\) равен \\(2\\).",
+          "mode": "beginner",
+          "createdAt": "2026-03-23T01:03:19.776Z"
+        }
+      ]
+    },
+    {
+      "id": "chat_bb45d8c1-169e-4a88-bacb-350630d704a4",
+      "userId": "usr_5a52de00-8ea1-40e1-b703-1ae30784812b",
+      "chatType": "global",
+      "lessonId": null,
+      "createdAt": "2026-03-23T01:03:44.695Z",
+      "messages": [
+        {
+          "id": "msg_987cde39-aa4d-4d1b-b600-2198b9f79f01",
+          "role": "user",
+          "content": "привет",
+          "mode": "default",
+          "createdAt": "2026-03-23T01:03:50.381Z"
+        },
+        {
+          "id": "msg_6827004a-1039-4e57-9e55-b092c1208b20",
+          "role": "assistant",
+          "content": "Здравствуйте! Как я могу помочь вам сегодня? Если у вас есть вопросы по математике или физике, не стесняйтесь задавать!",
+          "mode": "default",
+          "createdAt": "2026-03-23T01:03:51.793Z"
+        }
+      ]
+    },
+    {
+      "id": "chat_e7c8388e-132f-4ed6-ac1f-3fe611cef26f",
+      "userId": "usr_5a52de00-8ea1-40e1-b703-1ae30784812b",
+      "chatType": "lesson",
+      "lessonId": "custom-lesson_1c08ffcc-f42d-481e-8045-d09ebca9f9e3",
+      "createdAt": "2026-03-23T01:20:34.066Z",
+      "messages": []
+    },
+    {
+      "id": "chat_6fe6f398-32bd-4e10-bf2f-4e70ef61cebc",
+      "userId": "usr_5a52de00-8ea1-40e1-b703-1ae30784812b",
+      "chatType": "lesson",
+      "lessonId": "custom-lesson_37eac37e-183a-40da-b9ae-215eb98a45a3",
+      "createdAt": "2026-03-23T01:21:15.613Z",
+      "messages": []
+    }
+  ],
+  "customCourses": [
+    {
+      "id": "custom-course_b286e4ce-1205-4548-a154-90a2107c3e65",
+      "title": "нормальный курс",
+      "description": "вообще четкий реально",
+      "subject": "math",
+      "createdAt": "2026-03-23T01:19:50.057Z"
+    }
+  ],
+  "customSections": [
+    {
+      "id": "custom-section_f50b3ef9-e4be-4550-8446-5a3c47687a3d",
+      "courseId": "custom-course_b286e4ce-1205-4548-a154-90a2107c3e65",
+      "title": "самый четкий раздел",
+      "createdAt": "2026-03-23T01:20:09.142Z"
+    }
+  ],
+  "customLessons": [
+    {
+      "id": "custom-lesson_1c08ffcc-f42d-481e-8045-d09ebca9f9e3",
+      "sectionId": "custom-section_f50b3ef9-e4be-4550-8446-5a3c47687a3d",
+      "title": "самый четкий урок",
+      "description": "внатуре",
+      "videoUrl": "https://www.youtube.com/embed/dQw4w9WgXcQ",
+      "createdAt": "2026-03-23T01:20:23.119Z"
+    },
+    {
+      "id": "custom-lesson_37eac37e-183a-40da-b9ae-215eb98a45a3",
+      "sectionId": "custom-section_f50b3ef9-e4be-4550-8446-5a3c47687a3d",
+      "title": "менее четкий урок",
+      "description": "такой себе",
+      "videoUrl": "https://www.youtube.com/embed/dQw4w9WgXcQ",
+      "createdAt": "2026-03-23T01:21:06.832Z"
+    },
+    {
+      "id": "custom-lesson_1261a485-fdb4-481c-8e77-987550f0bea4",
+      "sectionId": "custom-section_f50b3ef9-e4be-4550-8446-5a3c47687a3d",
+      "title": "нах учебу",
+      "description": "нах нужна",
+      "videoUrl": "https://www.youtube.com/embed/dQw4w9WgXcQ",
+      "createdAt": "2026-03-23T01:21:53.582Z"
+    }
+  ]
+}
