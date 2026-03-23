@@ -12,10 +12,14 @@
     "@prisma/client": "^6.16.2",
     "bcryptjs": "^3.0.3",
     "jose": "^6.2.2",
+    "katex": "^0.16.40",
     "next": "16.2.1",
     "prisma": "^6.16.2",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "react-markdown": "^10.1.0",
+    "rehype-katex": "^7.0.1",
+    "remark-math": "^6.0.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

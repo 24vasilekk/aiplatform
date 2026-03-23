@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ChatMessageContent } from "@/components/chat-message-content";
 
 type Message = {
   id: string;
@@ -84,7 +85,7 @@ export function GlobalChat() {
                 : "rounded-lg bg-sky-100 p-2 text-sky-950"
             }
           >
-            {item.content}
+            <ChatMessageContent content={item.content} />
           </div>
         ))}
       </div>

@@ -1,13 +1,19 @@
 function mockReply(message: string, mode: string) {
   if (mode === "beginner") {
-    return `Объясняю просто: ${message}. 1) Определи данные. 2) Выбери формулу. 3) Подставь и проверь ответ.`;
+    return `Объясняю просто: ${message}.
+
+1) Определи данные.
+2) Выбери формулу (например, $a^2 + b^2 = c^2$).
+3) Подставь значения и проверь ответ.`;
   }
 
   if (mode === "similar_task") {
-    return "Похожая задача: Решите x^2 - 7x + 12 = 0. Ответ: 3 и 4.";
+    return "Похожая задача: решите уравнение $x^2 - 7x + 12 = 0$. Ответ: $x=3$ и $x=4$.";
   }
 
-  return `Разберем: ${message}. Начни с записи известных данных и цели задачи.`;
+  return `Разберем: ${message}. Начни с записи известных данных и цели задачи.
+
+Пример записи формулы: $$e^{i\\pi} = -1$$`;
 }
 
 function modeInstruction(mode: string) {
@@ -43,7 +49,7 @@ export async function generateAiReply(input: { message: string; mode?: string; c
         messages: [
           {
             role: "system",
-            content: `${modeInstruction(mode)} Контекст: ${input.context ?? "general"}.`,
+            content: `${modeInstruction(mode)} Используй LaTeX для формул: inline $...$, отдельные формулы в $$...$$. Контекст: ${input.context ?? "general"}.`,
           },
           {
             role: "user",

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { Task } from "@/lib/mvp-data";
+import { ChatMessageContent } from "@/components/chat-message-content";
 
 type Message = {
   id: string;
@@ -193,7 +194,7 @@ export function LessonWorkspace({
                   : "rounded-lg bg-sky-100 p-2 text-sky-950"
               }
             >
-              {item.content}
+              <ChatMessageContent content={item.content} />
             </div>
           ))}
         </div>
