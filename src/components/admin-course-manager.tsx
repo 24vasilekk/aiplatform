@@ -63,6 +63,13 @@ export function AdminCourseManager({
     }, {});
   }, [sections]);
 
+  const activeSectionCourseId = courses.some((course) => course.id === sectionCourseId)
+    ? sectionCourseId
+    : (courses[0]?.id ?? "");
+  const activeLessonSectionId = sections.some((section) => section.id === lessonSectionId)
+    ? lessonSectionId
+    : (sections[0]?.id ?? "");
+
   async function loadCourses() {
     const response = await fetch("/api/admin/courses", { cache: "no-store" });
     if (!response.ok) return;
@@ -129,7 +136,7 @@ export function AdminCourseManager({
     const response = await fetch("/api/admin/sections", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ courseId: sectionCourseId, title: sectionTitle }),
+      body: JSON.stringify({ courseId: activeSectionCourseId, title: sectionTitle }),
     });
 
     const data = (await response.json()) as { error?: string };
@@ -153,7 +160,7 @@ export function AdminCourseManager({
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        sectionId: lessonSectionId,
+        sectionId: activeLessonSectionId,
         title: lessonTitle,
         description: lessonDescription,
         videoUrl: lessonVideoUrl,
@@ -318,10 +325,26 @@ export function AdminCourseManager({
             onChange={(event) => setDescription(event.target.value)}
             required
           />
-          <select value={subject} onChange={(event) => setSubject(event.target.value as "math" | "physics")}>
-            <option value="math">Математика</option>
-            <option value="physics">Физика</option>
-          </select>
+          <div className="choice-group" role="radiogroup" aria-label="Предмет курса">
+            <button
+              type="button"
+              role="radio"
+              aria-checked={subject === "math"}
+              className={`choice-chip ${subject === "math" ? "choice-chip-active" : ""}`}
+              onClick={() => setSubject("math")}
+            >
+              Математика
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={subject === "physics"}
+              className={`choice-chip ${subject === "physics" ? "choice-chip-active" : ""}`}
+              onClick={() => setSubject("physics")}
+            >
+              Физика
+            </button>
+          </div>
           <button type="submit" className="btn-primary" disabled={loading}>
             {loading ? "Создание..." : "Создать курс"}
           </button>
@@ -329,14 +352,26 @@ export function AdminCourseManager({
 
         <form className="panel-accent space-y-3" onSubmit={onSectionSubmit}>
           <h2 className="text-lg font-semibold">2. Создать раздел</h2>
-          <select value={sectionCourseId} onChange={(event) => setSectionCourseId(event.target.value)} required>
-            <option value="">Выберите курс</option>
-            {courses.map((course) => (
-              <option key={course.id} value={course.id}>
-                {course.title}
-              </option>
-            ))}
-          </select>
+          {courses.length === 0 ? (
+            <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
+              Сначала создайте курс.
+            </p>
+          ) : (
+            <div className="choice-group" role="radiogroup" aria-label="Курс для раздела">
+              {courses.map((course) => (
+                <button
+                  key={course.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={activeSectionCourseId === course.id}
+                  className={`choice-chip ${activeSectionCourseId === course.id ? "choice-chip-active" : ""}`}
+                  onClick={() => setSectionCourseId(course.id)}
+                >
+                  {course.title}
+                </button>
+              ))}
+            </div>
+          )}
           <input
             type="text"
             placeholder="Название раздела"
@@ -352,14 +387,26 @@ export function AdminCourseManager({
 
         <form className="panel-accent space-y-3" onSubmit={onLessonSubmit}>
           <h2 className="text-lg font-semibold">3. Создать урок</h2>
-          <select value={lessonSectionId} onChange={(event) => setLessonSectionId(event.target.value)} required>
-            <option value="">Выберите раздел</option>
-            {sections.map((section) => (
-              <option key={section.id} value={section.id}>
-                {section.title}
-              </option>
-            ))}
-          </select>
+          {sections.length === 0 ? (
+            <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
+              Сначала создайте раздел.
+            </p>
+          ) : (
+            <div className="choice-group" role="radiogroup" aria-label="Раздел для урока">
+              {sections.map((section) => (
+                <button
+                  key={section.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={activeLessonSectionId === section.id}
+                  className={`choice-chip ${activeLessonSectionId === section.id ? "choice-chip-active" : ""}`}
+                  onClick={() => setLessonSectionId(section.id)}
+                >
+                  {section.title}
+                </button>
+              ))}
+            </div>
+          )}
           <input
             type="text"
             placeholder="Название урока"
