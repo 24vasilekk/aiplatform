@@ -23,8 +23,8 @@ export default function ForgotPasswordPage() {
 
   return (
     <section className="mx-auto max-w-md rounded-xl border border-slate-200 bg-white p-6">
-      <h1 className="mb-4 text-2xl font-semibold">Восстановление пароля</h1>
-      <form className="space-y-3" onSubmit={onSubmit}>
+      <h1 className="mb-4">Восстановление пароля</h1>
+      <form className="form-stack" onSubmit={onSubmit}>
         <input
           type="email"
           placeholder="Email"
@@ -37,9 +37,9 @@ export default function ForgotPasswordPage() {
           Отправить ссылку
         </button>
       </form>
-      {message ? <p className="mt-3 text-sm text-slate-600">{message}</p> : null}
+      {message ? <p className="mt-3 text-sm text-slate-700">{message}</p> : null}
       {resetUrl ? (
-        <p className="mt-2 text-xs text-slate-500">
+        <p className="form-helper mt-2">
           Dev-ссылка:{" "}
           <Link href={resetUrl} className="underline">
             Открыть форму сброса

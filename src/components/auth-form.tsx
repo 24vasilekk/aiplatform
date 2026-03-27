@@ -48,7 +48,7 @@ export function AuthForm({ mode }: { mode: Mode }) {
   }
 
   return (
-    <form className="space-y-3" onSubmit={onSubmit}>
+    <form className="form-stack" onSubmit={onSubmit}>
       <input
         type="email"
         placeholder="Email"

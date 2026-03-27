@@ -35,8 +35,8 @@ export default async function LessonPage({
   return (
     <section className="space-y-3">
       <article className="space-y-3">
-        <h1 className="text-2xl font-semibold">{lesson.title}</h1>
-        <p className="text-slate-600">{lesson.description}</p>
+        <h1>{lesson.title}</h1>
+        <p className="text-slate-700">{lesson.description}</p>
         <div className="aspect-video overflow-hidden rounded-xl border border-slate-200 bg-black">
           <iframe
             src={lesson.videoUrl}

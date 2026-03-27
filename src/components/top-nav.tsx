@@ -18,13 +18,13 @@ export function TopNav() {
     <header className="border-b border-slate-200 bg-white">
       <div className="mx-auto w-full max-w-6xl px-3 py-3 sm:px-4">
         <div className="flex items-center justify-between gap-3">
-          <Link href="/" className="font-semibold text-black">
+          <Link href="/" className="text-base font-medium tracking-[-0.01em] text-black">
             EGE AI Platform
           </Link>
 
           <button
             type="button"
-            className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 md:hidden"
+            className="rounded-lg px-4 py-2 text-sm text-slate-700 md:hidden"
             onClick={() => setOpen((current) => !current)}
             aria-expanded={open}
             aria-controls="mobile-nav"
@@ -32,7 +32,7 @@ export function TopNav() {
             {open ? "Закрыть" : "Меню"}
           </button>
 
-          <nav className="hidden items-center gap-2 text-sm text-slate-600 md:flex">
+          <nav className="hidden items-center gap-2 text-sm text-slate-700 md:flex">
             {links.map((link) => (
               <Link
                 key={link.href}

@@ -85,18 +85,18 @@ export function PricingPlans({ userEmail }: { userEmail: string }) {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <div className="grid gap-4">
         {plans.map((plan, index) => (
           <article
             key={plan.id}
-            className="panel-accent border-sky-300 transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_8px_22px_rgba(14,165,233,0.14)]"
+            className="card-soft card-soft-hover flex h-full flex-col p-6"
             style={{ animationDelay: `${index * 80}ms` }}
           >
-            <div className="mb-3 flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-xl font-semibold">{plan.title}</h2>
-                <p className="text-sm text-slate-600">{plan.subtitle}</p>
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-2">
+                <h2>{plan.title}</h2>
+                <p className="text-sm text-slate-700">{plan.subtitle}</p>
               </div>
               {plan.badge ? (
                 <span className="rounded-full border border-sky-300 bg-sky-50 px-2 py-1 text-xs font-medium text-sky-700">
@@ -105,15 +105,15 @@ export function PricingPlans({ userEmail }: { userEmail: string }) {
               ) : null}
             </div>
 
-            <p className="mb-3 text-3xl font-bold">{plan.price}</p>
+            <p className="mt-4 text-3xl font-semibold tracking-[-0.01em]">{plan.price}</p>
 
-            <ul className="mb-4 list-disc space-y-1 pl-5 text-sm text-slate-700">
+            <ul className="mt-4 list-disc space-y-2 pl-5 text-sm text-slate-800">
               {plan.features.map((feature) => (
                 <li key={feature}>{feature}</li>
               ))}
             </ul>
 
-            <button type="button" className="btn-primary" onClick={() => setActivePlan(plan)}>
+            <button type="button" className="btn-primary mt-auto w-fit" onClick={() => setActivePlan(plan)}>
               Оплатить
             </button>
           </article>
@@ -125,15 +125,15 @@ export function PricingPlans({ userEmail }: { userEmail: string }) {
           <div className="w-full max-w-md rounded-xl border border-sky-300 bg-white p-4 shadow-[0_18px_48px_rgba(2,6,23,0.28)] sm:p-5">
             <div className="mb-3 flex items-start justify-between gap-2">
               <div>
-                <h3 className="text-lg font-semibold">Оплата тарифа</h3>
-                <p className="text-sm text-slate-600">{planTitle}</p>
+                <h3>Оплата тарифа</h3>
+                <p className="text-sm text-slate-700">{planTitle}</p>
               </div>
-              <button type="button" className="btn-ghost px-2 py-1 text-xs" onClick={() => setActivePlan(null)}>
+              <button type="button" className="btn-ghost" onClick={() => setActivePlan(null)}>
                 Закрыть
               </button>
             </div>
 
-            <div className="space-y-3">
+            <div className="form-stack">
               <input
                 type="email"
                 value={email}
@@ -142,7 +142,7 @@ export function PricingPlans({ userEmail }: { userEmail: string }) {
                 className="w-full"
                 required
               />
-              <p className="text-xs text-slate-500">
+              <p className="form-helper">
                 Демо-режим: сейчас оплата эмулируется. Далее подключим ЮKassa, СБП и другие способы.
               </p>
               <button type="button" className="btn-primary w-full" onClick={pay} disabled={loading}>

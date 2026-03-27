@@ -34,18 +34,18 @@ export function AuthControls({ mobile = false }: { mobile?: boolean }) {
   }
 
   if (loading) {
-    return <span className="text-xs text-slate-500">Загрузка...</span>;
+    return <span className="text-xs text-slate-600">Загрузка...</span>;
   }
 
   if (!user) {
     return (
       <div className={mobile ? "grid gap-2" : "flex flex-wrap items-center gap-2 md:flex-nowrap"}>
-        <Link href="/login" className={mobile ? "btn-ghost w-full px-3 py-2 text-center" : "btn-ghost px-3 py-1.5 md:px-3 md:py-2"}>
+        <Link href="/login" className={mobile ? "btn-ghost w-full text-center" : "btn-ghost"}>
           Войти
         </Link>
         <Link
           href="/register"
-          className={mobile ? "btn-primary w-full px-3 py-2 text-center" : "btn-primary px-3 py-1.5 md:px-3 md:py-2"}
+          className={mobile ? "btn-primary w-full text-center" : "btn-primary"}
         >
           Регистрация
         </Link>
@@ -55,8 +55,8 @@ export function AuthControls({ mobile = false }: { mobile?: boolean }) {
 
   return (
     <div className={mobile ? "grid gap-2" : "flex flex-wrap items-center gap-2 md:flex-nowrap"}>
-      <span className={mobile ? "text-xs text-slate-500" : "max-w-[180px] truncate text-xs text-slate-500"}>{user.email}</span>
-      <button type="button" onClick={logout} className="btn-ghost px-2 py-1 text-xs">
+      <span className={mobile ? "text-xs text-slate-600" : "max-w-[180px] truncate text-xs text-slate-600"}>{user.email}</span>
+      <button type="button" onClick={logout} className="btn-ghost">
         Выйти
       </button>
     </div>

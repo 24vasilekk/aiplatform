@@ -26,23 +26,25 @@ export default async function DashboardPage() {
 
   return (
     <section className="space-y-4">
-      <h1 className="text-2xl font-semibold">Личный кабинет</h1>
-      <p className="text-sm text-slate-600">Пользователь: {user.email}</p>
-      <p className="text-sm text-slate-600">Просмотрено уроков: {progress.filter((item) => item.status === "completed").length}</p>
+      <h1>Личный кабинет</h1>
+      <p className="text-sm text-slate-700">Пользователь: {user.email}</p>
+      <p className="text-sm text-slate-700">Просмотрено уроков: {progress.filter((item) => item.status === "completed").length}</p>
 
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2">
         {items.map((course) => (
-          <article key={course.id} className="rounded-xl border border-sky-200 bg-white p-4 shadow-[0_2px_10px_rgba(14,165,233,0.08)]">
-            <p className="text-xs uppercase tracking-wide text-sky-700">{course.subject}</p>
-            <h2 className="text-lg font-semibold">{course.title}</h2>
-            <p className="mb-3 text-sm text-slate-600">{course.description}</p>
-            <p className="mb-3 text-sm">Прогресс: {course.progress}%</p>
+          <article key={course.id} className="card-soft card-soft-hover flex h-full flex-col p-6">
+            <div className="space-y-2">
+              <p className="text-xs uppercase tracking-wide text-sky-700">{course.subject}</p>
+              <h2>{course.title}</h2>
+              <p className="text-sm text-slate-700">{course.description}</p>
+            </div>
+            <p className="mt-4 text-sm">Прогресс: {course.progress}%</p>
             {course.hasAccess ? (
-              <Link href={`/courses/${course.id}`} className="btn-primary inline-block">
+              <Link href={`/courses/${course.id}`} className="btn-primary mt-auto inline-flex w-fit">
                 Открыть курс
               </Link>
             ) : (
-              <Link href="/pricing" className="btn-ghost inline-block">
+              <Link href="/pricing" className="btn-ghost mt-auto inline-flex w-fit">
                 Открыть доступ
               </Link>
             )}

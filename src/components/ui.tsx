@@ -2,9 +2,9 @@ import { ReactNode } from "react";
 
 export function Card({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="rounded-xl border border-sky-200 bg-white p-4 shadow-[0_2px_10px_rgba(14,165,233,0.08)]">
-      <h2 className="mb-2 text-lg font-semibold text-slate-900">{title}</h2>
-      <div className="text-sm text-slate-700">{children}</div>
+    <section className="card-soft p-6">
+      <h2 className="mb-3 text-slate-900">{title}</h2>
+      <div className="text-sm leading-relaxed text-slate-700">{children}</div>
     </section>
   );
 }

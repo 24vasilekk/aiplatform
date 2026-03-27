@@ -31,7 +31,7 @@ export default async function AdminPage() {
 
   return (
     <section className="space-y-4">
-      <h1 className="text-2xl font-semibold">Админ-панель (MVP)</h1>
+      <h1>Админ-панель (MVP)</h1>
       <AdminCourseManager
         initialCourses={customCourses}
         initialSections={customSections}

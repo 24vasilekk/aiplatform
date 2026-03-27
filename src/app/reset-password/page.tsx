@@ -43,8 +43,8 @@ function ResetPasswordForm() {
 
   return (
     <section className="mx-auto max-w-md rounded-xl border border-slate-200 bg-white p-6">
-      <h1 className="mb-4 text-2xl font-semibold">Новый пароль</h1>
-      <form className="space-y-3" onSubmit={onSubmit}>
+      <h1 className="mb-4">Новый пароль</h1>
+      <form className="form-stack" onSubmit={onSubmit}>
         <input
           type="text"
           placeholder="Токен восстановления"
@@ -75,7 +75,7 @@ function ResetPasswordForm() {
           {loading ? "Обновляем..." : "Сохранить пароль"}
         </button>
       </form>
-      {message ? <p className="mt-3 text-sm text-slate-600">{message}</p> : null}
+      {message ? <p className="mt-3 text-sm text-slate-700">{message}</p> : null}
     </section>
   );
 }

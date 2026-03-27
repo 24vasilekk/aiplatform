@@ -42,30 +42,30 @@ export default async function CoursePage({
 
   return (
     <section className="space-y-4">
-      <h1 className="text-2xl font-semibold">{course.title}</h1>
-      <p className="text-slate-600">{course.description}</p>
+      <h1>{course.title}</h1>
+      <p className="text-slate-700">{course.description}</p>
 
       {courseSections.length === 0 ? (
-        <article className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+        <article className="card-soft p-6 text-sm text-slate-700">
           Для этого курса разделы и уроки пока не добавлены.
         </article>
       ) : null}
 
       {sectionItems.map(({ section, lessons }) => (
-        <article key={section.id} className="rounded-xl border border-slate-200 bg-white p-4">
-          <h2 className="mb-2 text-lg font-semibold">{section.title}</h2>
-          <ul className="space-y-2">
+        <article key={section.id} className="card-soft p-6">
+          <h2>{section.title}</h2>
+          <ul className="mt-4 space-y-3">
             {lessons.map((lesson) => {
               return (
                 <li
                   key={lesson.id}
-                  className="flex flex-col gap-2 rounded-md border border-slate-100 p-2 sm:flex-row sm:items-center sm:justify-between"
+                  className="card-soft card-soft-hover flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between"
                 >
-                  <div>
+                  <div className="space-y-2">
                     <p className="font-medium">{lesson.title}</p>
-                    <p className="text-sm text-slate-600">{lesson.description}</p>
+                    <p className="text-sm text-slate-700">{lesson.description}</p>
                   </div>
-                  <Link href={`/lessons/${lesson.id}`} className="btn-primary inline-block self-start sm:self-auto">
+                  <Link href={`/lessons/${lesson.id}`} className="btn-primary inline-flex self-start sm:self-auto">
                     Открыть урок
                   </Link>
                 </li>

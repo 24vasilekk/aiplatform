@@ -26,6 +26,9 @@ export function LessonWorkspace({
   const [mode, setMode] = useState<"default" | "beginner" | "similar_task">("default");
   const [loading, setLoading] = useState(false);
   const [sendStatus, setSendStatus] = useState<string | null>(null);
+  const [attachmentContext, setAttachmentContext] = useState<string | null>(null);
+  const [attachmentStatus, setAttachmentStatus] = useState<string | null>(null);
+  const [processingAttachment, setProcessingAttachment] = useState(false);
 
   const quickModes = useMemo(
     () => [
@@ -93,7 +96,7 @@ export function LessonWorkspace({
       const response = await fetch(`/api/chat/lesson/${lessonId}/messages`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: trimmed, mode }),
+        body: JSON.stringify({ message: trimmed, mode, attachmentContext }),
       });
 
       if (!response.ok) {
@@ -115,6 +118,8 @@ export function LessonWorkspace({
         data.message,
       ]);
       setMessage("");
+      setAttachmentContext(null);
+      setAttachmentStatus(null);
     } catch {
       setSendStatus("Сетевая ошибка: не удалось отправить сообщение.");
     } finally {
@@ -122,25 +127,69 @@ export function LessonWorkspace({
     }
   }
 
+  async function processAttachment(file: File) {
+    if (processingAttachment) return;
+
+    setProcessingAttachment(true);
+    setAttachmentStatus(`Обрабатываем фото: ${file.name}`);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const uploadResponse = await fetch("/api/uploads", { method: "POST", body: formData });
+      const uploadData = (await uploadResponse.json().catch(() => ({}))) as {
+        upload?: { id: string };
+        error?: string;
+      };
+
+      if (!uploadResponse.ok || !uploadData.upload) {
+        setAttachmentStatus(uploadData.error ?? "Не удалось загрузить фото.");
+        return;
+      }
+
+      const analyzeResponse = await fetch("/api/ai/attachments/analyze", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ uploadId: uploadData.upload.id }),
+      });
+      const analyzeData = (await analyzeResponse.json().catch(() => ({}))) as {
+        context?: string;
+        error?: string;
+      };
+
+      if (!analyzeResponse.ok || !analyzeData.context) {
+        setAttachmentStatus(analyzeData.error ?? "Не удалось распознать фото.");
+        return;
+      }
+
+      setAttachmentContext(analyzeData.context);
+      setAttachmentStatus("Фото добавлено в контекст следующего сообщения.");
+    } catch {
+      setAttachmentStatus("Сетевая ошибка при обработке фото.");
+    } finally {
+      setProcessingAttachment(false);
+    }
+  }
+
   return (
     <div className="grid gap-4 lg:grid-cols-3">
-      <div className="space-y-2 rounded-xl border border-sky-200 bg-white p-4 lg:col-span-2">
-        <h2 className="text-lg font-semibold">Задания (часть 1)</h2>
-        {tasks.length === 0 ? <p className="text-sm text-slate-600">Для этого урока задания будут добавлены в админке.</p> : null}
+      <div className="card-soft space-y-4 p-6 lg:col-span-2">
+        <h2>Задания (часть 1)</h2>
+        {tasks.length === 0 ? <p className="text-sm text-slate-700">Для этого урока задания будут добавлены в админке.</p> : null}
         {tasks.map((task) => (
-          <div key={task.id} className="rounded-lg border border-sky-100 bg-sky-50/40 p-3">
-            <p className="mb-2 font-medium">{task.question}</p>
+          <div key={task.id} className="card-soft space-y-3 p-4">
+            <p className="font-medium">{task.question}</p>
             {task.type === "numeric" ? (
               <input
                 type="text"
                 placeholder="Введите ответ"
-                className="mb-2 w-full"
+                className="w-full"
                 value={answers[task.id] ?? ""}
                 onChange={(event) => setAnswers((current) => ({ ...current, [task.id]: event.target.value }))}
               />
             ) : (
               <select
-                className="mb-2 w-full"
+                className="w-full"
                 value={answers[task.id] ?? ""}
                 onChange={(event) => setAnswers((current) => ({ ...current, [task.id]: event.target.value }))}
               >
@@ -175,7 +224,7 @@ export function LessonWorkspace({
               </button>
             </div>
             {results[task.id] ? (
-              <div className="mt-3 rounded-md bg-slate-50 p-2 text-sm">
+              <div className="rounded-md bg-slate-50 p-2 text-sm">
                 <p className={results[task.id].ok ? "text-emerald-700" : "text-rose-700"}>
                   {results[task.id].ok ? "Верно" : "Неверно"}
                 </p>
@@ -186,8 +235,8 @@ export function LessonWorkspace({
         ))}
       </div>
 
-      <aside className="space-y-3 rounded-xl border border-sky-200 bg-white p-4">
-        <h2 className="text-lg font-semibold">AI-чат урока</h2>
+      <aside className="card-soft space-y-4 p-6">
+        <h2>AI-чат урока</h2>
         <div className="flex flex-wrap gap-2">
           {quickModes.map((item) => (
             <button
@@ -195,8 +244,8 @@ export function LessonWorkspace({
               type="button"
               className={
                 mode === item.id
-                  ? "rounded-md border border-sky-500 bg-sky-500 px-2 py-1 text-xs text-white"
-                  : "rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:border-sky-400 hover:text-sky-700"
+                  ? "inline-flex items-center justify-center rounded-lg border border-sky-500 bg-sky-500 px-3 py-2 text-sm font-medium text-white shadow-sm transition-[transform,box-shadow,background-color,border-color,color,opacity] duration-200 ease-out hover:border-sky-400 hover:bg-sky-400 hover:shadow-[0_4px_10px_rgba(14,165,233,0.24)] active:scale-[0.98]"
+                  : "inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition-[transform,box-shadow,background-color,border-color,color,opacity] duration-200 ease-out hover:border-sky-400 hover:bg-sky-50 hover:text-sky-700 hover:shadow-[0_4px_10px_rgba(15,23,42,0.08)] active:scale-[0.98]"
               }
               onClick={() => applyMode(item.id)}
             >
@@ -205,7 +254,7 @@ export function LessonWorkspace({
           ))}
         </div>
         <div className="max-h-[240px] space-y-2 overflow-y-auto rounded-lg border border-sky-200 p-2 text-sm sm:max-h-[280px]">
-          {messages.length === 0 ? <p className="text-slate-500">Задайте первый вопрос.</p> : null}
+          {messages.length === 0 ? <p className="text-slate-600">Задайте первый вопрос.</p> : null}
           {messages.map((item) => (
             <div
               key={item.id}
@@ -219,16 +268,43 @@ export function LessonWorkspace({
             </div>
           ))}
         </div>
-        <textarea
-          rows={4}
-          className="w-full"
-          placeholder="Задайте вопрос AI по теме урока"
-          value={message}
-          onChange={(event) => setMessage(event.target.value)}
-        />
-        <button type="button" className="w-full" onClick={send} disabled={loading}>
+        <div className="flex items-end gap-2">
+          <input
+            id="lesson-chat-photo"
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) {
+                void processAttachment(file);
+              }
+              event.currentTarget.value = "";
+            }}
+          />
+          <label
+            htmlFor="lesson-chat-photo"
+            className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 shadow-sm transition-[transform,box-shadow,background-color,border-color,color,opacity] duration-200 ease-out hover:border-sky-400 hover:bg-sky-50 hover:text-sky-700 hover:shadow-[0_4px_10px_rgba(15,23,42,0.08)] active:scale-[0.98]"
+            title="Отправить фото"
+            aria-label="Отправить фото"
+          >
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M4 7h4l2-2h4l2 2h4v12H4z" />
+              <circle cx="12" cy="13" r="4" />
+            </svg>
+          </label>
+          <textarea
+            rows={4}
+            className="w-full"
+            placeholder="Задайте вопрос AI по теме урока"
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+          />
+        </div>
+        <button type="button" className="w-full" onClick={send} disabled={loading || processingAttachment}>
           {loading ? "Отправка..." : "Отправить"}
         </button>
+        {attachmentStatus ? <p className="text-xs text-slate-700">{attachmentStatus}</p> : null}
         {sendStatus ? <p className="text-sm text-rose-600">{sendStatus}</p> : null}
       </aside>
     </div>
