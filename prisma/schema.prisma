@@ -8,26 +8,31 @@ datasource db {
 }
 
 model User {
-  id              String           @id @default(cuid())
-  email           String           @unique
-  passwordHash    String
-  role            UserRole         @default(STUDENT)
-  createdAt       DateTime         @default(now())
-  accesses        CourseAccess[]
-  lessonProgress  LessonProgress[]
-  taskAttempts    TaskAttempt[]
-  chatSessions    ChatSession[]
+  id             String               @id @default(cuid())
+  email          String               @unique
+  passwordHash   String
+  role           UserRole             @default(STUDENT)
+  createdAt      DateTime             @default(now())
+  accesses       CourseAccess[]
+  lessonProgress LessonProgress[]
+  taskAttempts   TaskAttempt[]
+  chatSessions   ChatSession[]
+  resetTokens    PasswordResetToken[]
+  payments       PaymentIntent[]
+  uploads        UserUpload[]
 }
 
 model CourseAccess {
-  id         String   @id @default(cuid())
+  id         String     @id @default(cuid())
   userId     String
   courseId   String
-  accessType String   @default("trial")
+  accessType AccessType @default(TRIAL)
   expiresAt  DateTime?
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime   @default(now())
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, courseId])
+  @@index([userId])
 }
 
 model LessonProgress {
@@ -40,6 +45,7 @@ model LessonProgress {
   user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, lessonId])
+  @@index([userId])
 }
 
 model TaskAttempt {
@@ -50,30 +56,140 @@ model TaskAttempt {
   isCorrect  Boolean?
   createdAt  DateTime @default(now())
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, taskId])
 }
 
 model ChatSession {
-  id        String      @id @default(cuid())
+  id        String        @id @default(cuid())
   userId    String
   chatType  ChatType
   lessonId  String?
-  createdAt DateTime    @default(now())
-  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime      @default(now())
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages  ChatMessage[]
 
   @@index([userId, chatType, lessonId])
 }
 
 model ChatMessage {
-  id        String   @id @default(cuid())
+  id        String      @id @default(cuid())
   chatId    String
   role      ChatRole
   content   String
-  mode      String   @default("default")
-  createdAt DateTime @default(now())
+  mode      String      @default("default")
+  createdAt DateTime    @default(now())
   chat      ChatSession @relation(fields: [chatId], references: [id], onDelete: Cascade)
 
   @@index([chatId, createdAt])
+}
+
+model CustomCourse {
+  id          String          @id
+  title       String
+  description String
+  subject     Subject
+  createdAt   DateTime        @default(now())
+  sections    CustomSection[]
+
+  @@index([subject])
+}
+
+model CustomSection {
+  id        String         @id
+  courseId  String
+  title     String
+  createdAt DateTime       @default(now())
+  course    CustomCourse   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons   CustomLesson[]
+
+  @@index([courseId])
+}
+
+model CustomLesson {
+  id          String       @id
+  sectionId   String
+  title       String
+  description String
+  videoUrl    String
+  createdAt   DateTime     @default(now())
+  section     CustomSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  tasks       CustomTask[]
+
+  @@index([sectionId])
+}
+
+model CustomTask {
+  id        String    @id
+  lessonId  String
+  type      TaskType
+  question  String
+  options   String?
+  answer    String
+  solution  String
+  createdAt DateTime  @default(now())
+  lesson    CustomLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@index([lessonId])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model PaymentIntent {
+  id                String        @id @default(cuid())
+  userId            String
+  planId            String
+  amountCents       Int
+  currency          String        @default("RUB")
+  status            PaymentStatus @default(CREATED)
+  provider          String        @default("mock")
+  providerPaymentId String?
+  checkoutToken     String        @unique
+  metadata          String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  paidAt            DateTime?
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+}
+
+model UserUpload {
+  id           String   @id @default(cuid())
+  userId       String
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  storagePath  String
+  extractedText String?
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model LessonKnowledge {
+  id            String   @id @default(cuid())
+  lessonId      String   @unique
+  originalName  String
+  mimeType      String
+  storagePath   String
+  extractedText String
+  summary       String?
+  pageCount     Int?
+  textChars     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 enum UserRole {
@@ -96,4 +212,29 @@ enum ChatRole {
   USER
   ASSISTANT
   SYSTEM
+}
+
+enum AccessType {
+  TRIAL
+  SUBSCRIPTION
+  PURCHASE
+}
+
+enum Subject {
+  math
+  physics
+}
+
+enum TaskType {
+  numeric
+  choice
+}
+
+enum PaymentStatus {
+  CREATED
+  REQUIRES_ACTION
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELED
 }

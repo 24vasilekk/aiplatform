@@ -28,49 +28,93 @@ function modeInstruction(mode: string) {
   return "Отвечай как преподаватель ЕГЭ по математике и физике, структурно и понятно.";
 }
 
-export async function generateAiReply(input: { message: string; mode?: string; context?: string }) {
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function generateAiReply(input: {
+  message: string;
+  mode?: string;
+  context?: string;
+  attachmentContext?: string;
+}) {
   const mode = input.mode ?? "default";
   const key = process.env.OPENROUTER_API_KEY;
   const model = process.env.OPENROUTER_MODEL ?? "openai/gpt-4o-mini";
 
+  const cleanMessage = input.message.trim().slice(0, 5000);
+  const attachmentContext = input.attachmentContext?.trim().slice(0, 5000);
+
   if (!key) {
-    return mockReply(input.message, mode);
+    return mockReply(cleanMessage, mode);
   }
 
-  try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${key}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          {
-            role: "system",
-            content: `${modeInstruction(mode)} Используй LaTeX для формул: inline $...$, отдельные формулы в $$...$$. Контекст: ${input.context ?? "general"}.`,
-          },
-          {
-            role: "user",
-            content: input.message,
-          },
-        ],
-        temperature: 0.4,
-      }),
-    });
+  const systemPrompt = [
+    modeInstruction(mode),
+    "Используй LaTeX для формул: inline $...$, отдельные формулы в $$...$$.",
+    `Контекст урока/чата: ${input.context ?? "general"}.`,
+    attachmentContext
+      ? "Если есть текст из вложения, используй его как приоритетный контекст и явно отмечай, если данные неполные."
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
-    if (!response.ok) {
-      return mockReply(input.message, mode);
+  const userMessage = attachmentContext
+    ? `${cleanMessage}\n\nКонтекст из вложения:\n${attachmentContext}`
+    : cleanMessage;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await fetchWithTimeout(
+        "https://openrouter.ai/api/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${key}`,
+          },
+          body: JSON.stringify({
+            model,
+            messages: [
+              {
+                role: "system",
+                content: systemPrompt,
+              },
+              {
+                role: "user",
+                content: userMessage,
+              },
+            ],
+            temperature: 0.3,
+          }),
+        },
+        12000,
+      );
+
+      if (!response.ok) {
+        continue;
+      }
+
+      const data = (await response.json()) as {
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+
+      const content = data.choices?.[0]?.message?.content?.trim();
+      if (content && content.length > 0) {
+        return content;
+      }
+    } catch {
+      // Retry once for flaky provider/network errors.
     }
-
-    const data = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-
-    const content = data.choices?.[0]?.message?.content?.trim();
-    return content && content.length > 0 ? content : mockReply(input.message, mode);
-  } catch {
-    return mockReply(input.message, mode);
   }
+
+  return mockReply(cleanMessage, mode);
 }

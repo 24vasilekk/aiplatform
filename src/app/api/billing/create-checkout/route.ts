@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/api-auth";
-import { grantCourseAccess } from "@/lib/db";
-import { listAllCourses } from "@/lib/course-catalog";
 import { DEMO_PAID_COOKIE, DEMO_PAID_COURSES_COOKIE } from "@/lib/auth";
+import { createCheckout, getBillingProvider, type PlanId } from "@/lib/billing";
 
 const schema = z.object({
   planId: z.enum(["math_only", "bundle_2", "all_access"]).default("all_access"),
@@ -21,24 +20,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Неверные данные оплаты" }, { status: 400 });
   }
 
-  const { planId } = parsed.data;
-  const allCourses = await listAllCourses();
-
-  const planCourseIds =
-    planId === "math_only"
-      ? ["math-base"]
-      : planId === "bundle_2"
-        ? ["math-base", "physics-base"]
-        : allCourses.map((course) => course.id);
-
-  let savedInDb = true;
-  try {
-    await Promise.all(
-      planCourseIds.map((courseId) => grantCourseAccess(auth.user!.id, courseId, "subscription")),
-    );
-  } catch {
-    savedInDb = false;
-  }
+  const { planId, email } = parsed.data;
+  const checkout = await createCheckout({
+    userId: auth.user.id,
+    planId: planId as PlanId,
+    email,
+  });
 
   const planLabel =
     planId === "math_only"
@@ -49,12 +36,19 @@ export async function POST(request: NextRequest) {
 
   const response = NextResponse.json({
     ok: true,
-    message: savedInDb
-      ? `Демо-оплата: ${planLabel}. Доступ открыт.`
-      : `Демо-оплата: ${planLabel}. Доступ сохранен через cookie (без внешней БД).`,
+    message: checkout.finalStatus === "succeeded"
+      ? `Оплата подтверждена: ${planLabel}. Доступ открыт.`
+      : `Счет создан: ${planLabel}. Провайдер: ${getBillingProvider()}. Ожидаем подтверждение оплаты.`,
+    payment: {
+      id: checkout.payment.id,
+      checkoutToken: checkout.payment.checkoutToken,
+      status: checkout.finalStatus,
+      amountCents: checkout.payment.amountCents,
+      currency: checkout.payment.currency,
+    },
   });
 
-  if (planId === "all_access") {
+  if (checkout.finalStatus === "succeeded" && planId === "all_access") {
     response.cookies.set(DEMO_PAID_COOKIE, "1", {
       httpOnly: true,
       sameSite: "lax",
@@ -69,6 +63,21 @@ export async function POST(request: NextRequest) {
       path: "/",
       maxAge: 0,
     });
+  } else if (checkout.finalStatus === "succeeded") {
+    response.cookies.set(DEMO_PAID_COOKIE, "0", {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30,
+    });
+    response.cookies.set(DEMO_PAID_COURSES_COOKIE, checkout.planCourseIds.join(","), {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30,
+    });
   } else {
     response.cookies.set(DEMO_PAID_COOKIE, "0", {
       httpOnly: true,
@@ -77,12 +86,12 @@ export async function POST(request: NextRequest) {
       path: "/",
       maxAge: 60 * 60 * 24 * 30,
     });
-    response.cookies.set(DEMO_PAID_COURSES_COOKIE, planCourseIds.join(","), {
+    response.cookies.set(DEMO_PAID_COURSES_COOKIE, "", {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
       path: "/",
-      maxAge: 60 * 60 * 24 * 30,
+      maxAge: 0,
     });
   }
 

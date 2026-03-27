@@ -1,5 +1,4 @@
-import { promises as fs } from "node:fs";
-import path from "node:path";
+import { prisma } from "@/lib/prisma";
 import type { Subject } from "@/lib/mvp-data";
 
 export type UserRole = "student" | "admin";
@@ -90,131 +89,249 @@ export type CustomTaskRecord = {
   createdAt: string;
 };
 
-type DbShape = {
-  users: UserRecord[];
-  courseAccesses: CourseAccessRecord[];
-  lessonProgress: LessonProgressRecord[];
-  taskAttempts: TaskAttemptRecord[];
-  chatSessions: ChatSessionRecord[];
-  customCourses: CustomCourseRecord[];
-  customSections: CustomSectionRecord[];
-  customLessons: CustomLessonRecord[];
-  customTasks: CustomTaskRecord[];
+export type PaymentIntentRecord = {
+  id: string;
+  userId: string;
+  planId: string;
+  amountCents: number;
+  currency: string;
+  status: "created" | "requires_action" | "processing" | "succeeded" | "failed" | "canceled";
+  provider: string;
+  providerPaymentId: string | null;
+  checkoutToken: string;
+  metadata: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
-const DB_PATH = path.join(process.cwd(), "data", "db.json");
+export type PasswordResetTokenRecord = {
+  id: string;
+  userId: string;
+  tokenHash: string;
+  expiresAt: string;
+  usedAt: string | null;
+  createdAt: string;
+};
 
-const initialDb: DbShape = {
-  users: [],
-  courseAccesses: [],
-  lessonProgress: [],
-  taskAttempts: [],
-  chatSessions: [],
-  customCourses: [],
-  customSections: [],
-  customLessons: [],
-  customTasks: [],
+export type UserUploadRecord = {
+  id: string;
+  userId: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  storagePath: string;
+  extractedText: string | null;
+  createdAt: string;
+};
+
+export type LessonKnowledgeRecord = {
+  id: string;
+  lessonId: string;
+  originalName: string;
+  mimeType: string;
+  storagePath: string;
+  extractedText: string;
+  summary: string | null;
+  pageCount: number | null;
+  textChars: number;
+  createdAt: string;
+  updatedAt: string;
 };
 
 function uid(prefix: string) {
   return `${prefix}_${crypto.randomUUID()}`;
 }
 
-async function ensureDbFile() {
-  try {
-    await fs.access(DB_PATH);
-  } catch {
-    await fs.mkdir(path.dirname(DB_PATH), { recursive: true });
-    await fs.writeFile(DB_PATH, JSON.stringify(initialDb, null, 2), "utf8");
-  }
+function mapRole(role: "STUDENT" | "ADMIN"): UserRole {
+  return role === "ADMIN" ? "admin" : "student";
 }
 
-export async function readDb(): Promise<DbShape> {
-  await ensureDbFile();
-  const raw = await fs.readFile(DB_PATH, "utf8");
-  const parsed = JSON.parse(raw) as Partial<DbShape>;
-
+function toUserRecord(user: {
+  id: string;
+  email: string;
+  passwordHash: string;
+  role: "STUDENT" | "ADMIN";
+  createdAt: Date;
+}): UserRecord {
   return {
-    users: parsed.users ?? [],
-    courseAccesses: parsed.courseAccesses ?? [],
-    lessonProgress: parsed.lessonProgress ?? [],
-    taskAttempts: parsed.taskAttempts ?? [],
-    chatSessions: parsed.chatSessions ?? [],
-    customCourses: parsed.customCourses ?? [],
-    customSections: parsed.customSections ?? [],
-    customLessons: parsed.customLessons ?? [],
-    customTasks: parsed.customTasks ?? [],
+    id: user.id,
+    email: user.email,
+    passwordHash: user.passwordHash,
+    role: mapRole(user.role),
+    createdAt: user.createdAt.toISOString(),
   };
 }
 
-export async function writeDb(data: DbShape) {
-  await ensureDbFile();
-  await fs.writeFile(DB_PATH, JSON.stringify(data, null, 2), "utf8");
+function toAccessRecord(access: {
+  id: string;
+  userId: string;
+  courseId: string;
+  accessType: "TRIAL" | "SUBSCRIPTION" | "PURCHASE";
+  expiresAt: Date | null;
+}): CourseAccessRecord {
+  return {
+    id: access.id,
+    userId: access.userId,
+    courseId: access.courseId,
+    accessType:
+      access.accessType === "PURCHASE"
+        ? "purchase"
+        : access.accessType === "SUBSCRIPTION"
+          ? "subscription"
+          : "trial",
+    expiresAt: access.expiresAt?.toISOString() ?? null,
+  };
+}
+
+function toProgressRecord(progress: {
+  id: string;
+  userId: string;
+  lessonId: string;
+  status: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
+  lastPositionSec: number;
+  updatedAt: Date;
+}): LessonProgressRecord {
+  return {
+    id: progress.id,
+    userId: progress.userId,
+    lessonId: progress.lessonId,
+    status:
+      progress.status === "COMPLETED"
+        ? "completed"
+        : progress.status === "IN_PROGRESS"
+          ? "in_progress"
+          : "not_started",
+    lastPositionSec: progress.lastPositionSec,
+    updatedAt: progress.updatedAt.toISOString(),
+  };
+}
+
+function toTaskRecord(task: {
+  id: string;
+  lessonId: string;
+  type: "numeric" | "choice";
+  question: string;
+  options: string | null;
+  answer: string;
+  solution: string;
+  createdAt: Date;
+}): CustomTaskRecord {
+  return {
+    id: task.id,
+    lessonId: task.lessonId,
+    type: task.type,
+    question: task.question,
+    options: task.options ? (JSON.parse(task.options) as string[]) : null,
+    answer: task.answer,
+    solution: task.solution,
+    createdAt: task.createdAt.toISOString(),
+  };
+}
+
+function toPaymentRecord(payment: {
+  id: string;
+  userId: string;
+  planId: string;
+  amountCents: number;
+  currency: string;
+  status: "CREATED" | "REQUIRES_ACTION" | "PROCESSING" | "SUCCEEDED" | "FAILED" | "CANCELED";
+  provider: string;
+  providerPaymentId: string | null;
+  checkoutToken: string;
+  metadata: string | null;
+  paidAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}): PaymentIntentRecord {
+  return {
+    id: payment.id,
+    userId: payment.userId,
+    planId: payment.planId,
+    amountCents: payment.amountCents,
+    currency: payment.currency,
+    status: payment.status.toLowerCase() as PaymentIntentRecord["status"],
+    provider: payment.provider,
+    providerPaymentId: payment.providerPaymentId,
+    checkoutToken: payment.checkoutToken,
+    metadata: payment.metadata,
+    paidAt: payment.paidAt?.toISOString() ?? null,
+    createdAt: payment.createdAt.toISOString(),
+    updatedAt: payment.updatedAt.toISOString(),
+  };
 }
 
 export async function findUserByEmail(email: string) {
-  const db = await readDb();
-  return db.users.find((user) => user.email.toLowerCase() === email.toLowerCase()) ?? null;
+  const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+  return user ? toUserRecord(user) : null;
 }
 
 export async function findUserById(userId: string) {
-  const db = await readDb();
-  return db.users.find((user) => user.id === userId) ?? null;
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  return user ? toUserRecord(user) : null;
 }
 
 export async function createUser(input: { email: string; passwordHash: string; role?: UserRole }) {
-  const db = await readDb();
-
-  const user: UserRecord = {
-    id: uid("usr"),
-    email: input.email,
-    passwordHash: input.passwordHash,
-    role: input.role ?? "student",
-    createdAt: new Date().toISOString(),
-  };
-
-  db.users.push(user);
-
-  db.courseAccesses.push({
-    id: uid("acc"),
-    userId: user.id,
-    courseId: "math-base",
-    accessType: "trial",
-    expiresAt: null,
+  const role = input.role === "admin" ? "ADMIN" : "STUDENT";
+  const user = await prisma.user.create({
+    data: {
+      email: input.email.toLowerCase(),
+      passwordHash: input.passwordHash,
+      role,
+      accesses: {
+        create: {
+          courseId: "math-base",
+          accessType: "TRIAL",
+        },
+      },
+    },
   });
 
-  await writeDb(db);
-  return user;
+  return toUserRecord(user);
 }
 
 export async function listCourseAccess(userId: string) {
-  const db = await readDb();
-  return db.courseAccesses.filter((access) => access.userId === userId);
+  const accesses = await prisma.courseAccess.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+  });
+  return accesses.map(toAccessRecord);
 }
 
 export async function hasCourseAccess(userId: string, courseId: string) {
-  const db = await readDb();
-  return db.courseAccesses.some((access) => access.userId === userId && access.courseId === courseId);
+  const now = new Date();
+  const count = await prisma.courseAccess.count({
+    where: {
+      userId,
+      courseId,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+    },
+  });
+
+  return count > 0;
 }
 
 export async function grantCourseAccess(
   userId: string,
   courseId: string,
   accessType: CourseAccessRecord["accessType"] = "subscription",
+  expiresAt?: Date | null,
 ) {
-  const db = await readDb();
-  const exists = db.courseAccesses.find((item) => item.userId === userId && item.courseId === courseId);
-
-  if (!exists) {
-    db.courseAccesses.push({
-      id: uid("acc"),
+  await prisma.courseAccess.upsert({
+    where: { userId_courseId: { userId, courseId } },
+    update: {
+      accessType:
+        accessType === "purchase" ? "PURCHASE" : accessType === "subscription" ? "SUBSCRIPTION" : "TRIAL",
+      expiresAt: expiresAt ?? null,
+    },
+    create: {
       userId,
       courseId,
-      accessType,
-      expiresAt: null,
-    });
-    await writeDb(db);
-  }
+      accessType:
+        accessType === "purchase" ? "PURCHASE" : accessType === "subscription" ? "SUBSCRIPTION" : "TRIAL",
+      expiresAt: expiresAt ?? null,
+    },
+  });
 }
 
 export async function saveLessonProgress(input: {
@@ -223,32 +340,37 @@ export async function saveLessonProgress(input: {
   status: LessonProgressRecord["status"];
   lastPositionSec: number;
 }) {
-  const db = await readDb();
-  const existing = db.lessonProgress.find(
-    (item) => item.userId === input.userId && item.lessonId === input.lessonId,
-  );
-
-  if (existing) {
-    existing.status = input.status;
-    existing.lastPositionSec = input.lastPositionSec;
-    existing.updatedAt = new Date().toISOString();
-  } else {
-    db.lessonProgress.push({
-      id: uid("prg"),
+  await prisma.lessonProgress.upsert({
+    where: { userId_lessonId: { userId: input.userId, lessonId: input.lessonId } },
+    update: {
+      status:
+        input.status === "completed"
+          ? "COMPLETED"
+          : input.status === "in_progress"
+            ? "IN_PROGRESS"
+            : "NOT_STARTED",
+      lastPositionSec: Math.max(0, Math.floor(input.lastPositionSec || 0)),
+    },
+    create: {
       userId: input.userId,
       lessonId: input.lessonId,
-      status: input.status,
-      lastPositionSec: input.lastPositionSec,
-      updatedAt: new Date().toISOString(),
-    });
-  }
-
-  await writeDb(db);
+      status:
+        input.status === "completed"
+          ? "COMPLETED"
+          : input.status === "in_progress"
+            ? "IN_PROGRESS"
+            : "NOT_STARTED",
+      lastPositionSec: Math.max(0, Math.floor(input.lastPositionSec || 0)),
+    },
+  });
 }
 
 export async function listProgress(userId: string) {
-  const db = await readDb();
-  return db.lessonProgress.filter((item) => item.userId === userId);
+  const rows = await prisma.lessonProgress.findMany({
+    where: { userId },
+    orderBy: { updatedAt: "desc" },
+  });
+  return rows.map(toProgressRecord);
 }
 
 export async function saveTaskAttempt(input: {
@@ -257,16 +379,14 @@ export async function saveTaskAttempt(input: {
   answerText: string;
   isCorrect: boolean;
 }) {
-  const db = await readDb();
-  db.taskAttempts.push({
-    id: uid("att"),
-    userId: input.userId,
-    taskId: input.taskId,
-    answerText: input.answerText,
-    isCorrect: input.isCorrect,
-    createdAt: new Date().toISOString(),
+  await prisma.taskAttempt.create({
+    data: {
+      userId: input.userId,
+      taskId: input.taskId,
+      answerText: input.answerText,
+      isCorrect: input.isCorrect,
+    },
   });
-  await writeDb(db);
 }
 
 async function ensureChatSession(input: {
@@ -274,28 +394,25 @@ async function ensureChatSession(input: {
   chatType: ChatSessionRecord["chatType"];
   lessonId: string | null;
 }) {
-  const db = await readDb();
-  let session = db.chatSessions.find(
-    (item) =>
-      item.userId === input.userId &&
-      item.chatType === input.chatType &&
-      item.lessonId === input.lessonId,
-  );
-
-  if (!session) {
-    session = {
-      id: uid("chat"),
+  const existing = await prisma.chatSession.findFirst({
+    where: {
       userId: input.userId,
-      chatType: input.chatType,
+      chatType: input.chatType === "lesson" ? "LESSON" : "GLOBAL",
       lessonId: input.lessonId,
-      createdAt: new Date().toISOString(),
-      messages: [],
-    };
-    db.chatSessions.push(session);
-    await writeDb(db);
+    },
+  });
+
+  if (existing) {
+    return existing;
   }
 
-  return session;
+  return prisma.chatSession.create({
+    data: {
+      userId: input.userId,
+      chatType: input.chatType === "lesson" ? "LESSON" : "GLOBAL",
+      lessonId: input.lessonId,
+    },
+  });
 }
 
 export async function listChatMessages(input: {
@@ -304,7 +421,18 @@ export async function listChatMessages(input: {
   lessonId: string | null;
 }) {
   const session = await ensureChatSession(input);
-  return session.messages;
+  const messages = await prisma.chatMessage.findMany({
+    where: { chatId: session.id },
+    orderBy: { createdAt: "asc" },
+  });
+
+  return messages.map((message) => ({
+    id: message.id,
+    role: message.role.toLowerCase() as ChatMessageRecord["role"],
+    content: message.content,
+    mode: message.mode,
+    createdAt: message.createdAt.toISOString(),
+  }));
 }
 
 export async function addChatMessage(input: {
@@ -315,47 +443,39 @@ export async function addChatMessage(input: {
   content: string;
   mode?: string;
 }) {
-  const db = await readDb();
-  let session = db.chatSessions.find(
-    (item) =>
-      item.userId === input.userId &&
-      item.chatType === input.chatType &&
-      item.lessonId === input.lessonId,
-  );
+  const session = await ensureChatSession(input);
+  const message = await prisma.chatMessage.create({
+    data: {
+      chatId: session.id,
+      role: input.role.toUpperCase() as "USER" | "ASSISTANT" | "SYSTEM",
+      content: input.content,
+      mode: input.mode ?? "default",
+    },
+  });
 
-  if (!session) {
-    session = {
-      id: uid("chat"),
-      userId: input.userId,
-      chatType: input.chatType,
-      lessonId: input.lessonId,
-      createdAt: new Date().toISOString(),
-      messages: [],
-    };
-    db.chatSessions.push(session);
-  }
-
-  const message: ChatMessageRecord = {
-    id: uid("msg"),
-    role: input.role,
-    content: input.content,
-    mode: input.mode ?? "default",
-    createdAt: new Date().toISOString(),
+  return {
+    id: message.id,
+    role: message.role.toLowerCase() as ChatMessageRecord["role"],
+    content: message.content,
+    mode: message.mode,
+    createdAt: message.createdAt.toISOString(),
   };
-
-  session.messages.push(message);
-  await writeDb(db);
-  return message;
 }
 
 export async function listUsers() {
-  const db = await readDb();
-  return db.users;
+  const users = await prisma.user.findMany({ orderBy: { createdAt: "desc" } });
+  return users.map(toUserRecord);
 }
 
 export async function listCustomCourses() {
-  const db = await readDb();
-  return db.customCourses;
+  const courses = await prisma.customCourse.findMany({ orderBy: { createdAt: "asc" } });
+  return courses.map((course) => ({
+    id: course.id,
+    title: course.title,
+    description: course.description,
+    subject: course.subject,
+    createdAt: course.createdAt.toISOString(),
+  }));
 }
 
 export async function createCustomCourse(input: {
@@ -363,120 +483,124 @@ export async function createCustomCourse(input: {
   description: string;
   subject: Subject;
 }) {
-  const db = await readDb();
+  const course = await prisma.customCourse.create({
+    data: {
+      id: `custom-${uid("course")}`,
+      title: input.title,
+      description: input.description,
+      subject: input.subject,
+    },
+  });
 
-  const course: CustomCourseRecord = {
-    id: `custom-${uid("course")}`,
-    title: input.title,
-    description: input.description,
-    subject: input.subject,
-    createdAt: new Date().toISOString(),
+  return {
+    id: course.id,
+    title: course.title,
+    description: course.description,
+    subject: course.subject,
+    createdAt: course.createdAt.toISOString(),
   };
-
-  db.customCourses.push(course);
-  await writeDb(db);
-
-  return course;
 }
 
 export async function updateCustomCourse(
   courseId: string,
   input: { title?: string; description?: string; subject?: Subject },
 ) {
-  const db = await readDb();
-  const course = db.customCourses.find((item) => item.id === courseId);
-  if (!course) return null;
+  try {
+    const course = await prisma.customCourse.update({
+      where: { id: courseId },
+      data: {
+        title: input.title,
+        description: input.description,
+        subject: input.subject,
+      },
+    });
 
-  if (typeof input.title === "string") {
-    course.title = input.title;
+    return {
+      id: course.id,
+      title: course.title,
+      description: course.description,
+      subject: course.subject,
+      createdAt: course.createdAt.toISOString(),
+    };
+  } catch {
+    return null;
   }
-  if (typeof input.description === "string") {
-    course.description = input.description;
-  }
-  if (typeof input.subject === "string") {
-    course.subject = input.subject;
-  }
-
-  await writeDb(db);
-  return course;
 }
 
 export async function deleteCustomCourse(courseId: string) {
-  const db = await readDb();
-  const course = db.customCourses.find((item) => item.id === courseId);
-  if (!course) return false;
-
-  const sectionIds = db.customSections
-    .filter((section) => section.courseId === courseId)
-    .map((section) => section.id);
-  const lessonIds = db.customLessons
-    .filter((lesson) => sectionIds.includes(lesson.sectionId))
-    .map((lesson) => lesson.id);
-
-  db.customCourses = db.customCourses.filter((item) => item.id !== courseId);
-  db.customSections = db.customSections.filter((item) => item.courseId !== courseId);
-  db.customLessons = db.customLessons.filter((lesson) => !sectionIds.includes(lesson.sectionId));
-  db.customTasks = db.customTasks.filter((task) => !lessonIds.includes(task.lessonId));
-  db.courseAccesses = db.courseAccesses.filter((access) => access.courseId !== courseId);
-
-  await writeDb(db);
-  return true;
+  try {
+    await prisma.customCourse.delete({ where: { id: courseId } });
+    await prisma.courseAccess.deleteMany({ where: { courseId } });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function listCustomSections() {
-  const db = await readDb();
-  return db.customSections;
+  const sections = await prisma.customSection.findMany({ orderBy: { createdAt: "asc" } });
+  return sections.map((section) => ({
+    id: section.id,
+    courseId: section.courseId,
+    title: section.title,
+    createdAt: section.createdAt.toISOString(),
+  }));
 }
 
 export async function createCustomSection(input: { courseId: string; title: string }) {
-  const db = await readDb();
+  const section = await prisma.customSection.create({
+    data: {
+      id: `custom-${uid("section")}`,
+      courseId: input.courseId,
+      title: input.title,
+    },
+  });
 
-  const section: CustomSectionRecord = {
-    id: `custom-${uid("section")}`,
-    courseId: input.courseId,
-    title: input.title,
-    createdAt: new Date().toISOString(),
+  return {
+    id: section.id,
+    courseId: section.courseId,
+    title: section.title,
+    createdAt: section.createdAt.toISOString(),
   };
-
-  db.customSections.push(section);
-  await writeDb(db);
-
-  return section;
 }
 
 export async function updateCustomSection(sectionId: string, input: { title?: string }) {
-  const db = await readDb();
-  const section = db.customSections.find((item) => item.id === sectionId);
-  if (!section) return null;
+  try {
+    const section = await prisma.customSection.update({
+      where: { id: sectionId },
+      data: { title: input.title },
+    });
 
-  if (typeof input.title === "string") {
-    section.title = input.title;
+    return {
+      id: section.id,
+      courseId: section.courseId,
+      title: section.title,
+      createdAt: section.createdAt.toISOString(),
+    };
+  } catch {
+    return null;
   }
-
-  await writeDb(db);
-  return section;
 }
 
 export async function deleteCustomSection(sectionId: string) {
-  const db = await readDb();
-  const section = db.customSections.find((item) => item.id === sectionId);
-  if (!section) return false;
-
-  const lessonIds = db.customLessons
-    .filter((lesson) => lesson.sectionId === sectionId)
-    .map((lesson) => lesson.id);
-
-  db.customSections = db.customSections.filter((item) => item.id !== sectionId);
-  db.customLessons = db.customLessons.filter((lesson) => lesson.sectionId !== sectionId);
-  db.customTasks = db.customTasks.filter((task) => !lessonIds.includes(task.lessonId));
-
-  await writeDb(db);
-  return true;
+  try {
+    await prisma.customSection.delete({ where: { id: sectionId } });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function listCustomLessons() {
-  const db = await readDb();
-  return db.customLessons;
+  const lessons = await prisma.customLesson.findMany({ orderBy: { createdAt: "asc" } });
+  return lessons.map((lesson) => ({
+    id: lesson.id,
+    sectionId: lesson.sectionId,
+    title: lesson.title,
+    description: lesson.description,
+    videoUrl: lesson.videoUrl,
+    createdAt: lesson.createdAt.toISOString(),
+  }));
 }
 
 export async function createCustomLesson(input: {
@@ -485,69 +609,78 @@ export async function createCustomLesson(input: {
   description: string;
   videoUrl: string;
 }) {
-  const db = await readDb();
+  const lesson = await prisma.customLesson.create({
+    data: {
+      id: `custom-${uid("lesson")}`,
+      sectionId: input.sectionId,
+      title: input.title,
+      description: input.description,
+      videoUrl: input.videoUrl,
+    },
+  });
 
-  const lesson: CustomLessonRecord = {
-    id: `custom-${uid("lesson")}`,
-    sectionId: input.sectionId,
-    title: input.title,
-    description: input.description,
-    videoUrl: input.videoUrl,
-    createdAt: new Date().toISOString(),
+  return {
+    id: lesson.id,
+    sectionId: lesson.sectionId,
+    title: lesson.title,
+    description: lesson.description,
+    videoUrl: lesson.videoUrl,
+    createdAt: lesson.createdAt.toISOString(),
   };
-
-  db.customLessons.push(lesson);
-  await writeDb(db);
-
-  return lesson;
 }
 
 export async function updateCustomLesson(
   lessonId: string,
   input: { title?: string; description?: string; videoUrl?: string },
 ) {
-  const db = await readDb();
-  const lesson = db.customLessons.find((item) => item.id === lessonId);
-  if (!lesson) return null;
+  try {
+    const lesson = await prisma.customLesson.update({
+      where: { id: lessonId },
+      data: {
+        title: input.title,
+        description: input.description,
+        videoUrl: input.videoUrl,
+      },
+    });
 
-  if (typeof input.title === "string") {
-    lesson.title = input.title;
+    return {
+      id: lesson.id,
+      sectionId: lesson.sectionId,
+      title: lesson.title,
+      description: lesson.description,
+      videoUrl: lesson.videoUrl,
+      createdAt: lesson.createdAt.toISOString(),
+    };
+  } catch {
+    return null;
   }
-  if (typeof input.description === "string") {
-    lesson.description = input.description;
-  }
-  if (typeof input.videoUrl === "string") {
-    lesson.videoUrl = input.videoUrl;
-  }
-
-  await writeDb(db);
-  return lesson;
 }
 
 export async function deleteCustomLesson(lessonId: string) {
-  const db = await readDb();
-  const exists = db.customLessons.some((item) => item.id === lessonId);
-  if (!exists) return false;
-
-  db.customLessons = db.customLessons.filter((item) => item.id !== lessonId);
-  db.customTasks = db.customTasks.filter((task) => task.lessonId !== lessonId);
-  await writeDb(db);
-  return true;
+  try {
+    await prisma.customLesson.delete({ where: { id: lessonId } });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function listCustomTasks() {
-  const db = await readDb();
-  return db.customTasks;
+  const tasks = await prisma.customTask.findMany({ orderBy: { createdAt: "asc" } });
+  return tasks.map(toTaskRecord);
 }
 
 export async function listCustomTasksByLessonId(lessonId: string) {
-  const db = await readDb();
-  return db.customTasks.filter((task) => task.lessonId === lessonId);
+  const tasks = await prisma.customTask.findMany({
+    where: { lessonId },
+    orderBy: { createdAt: "asc" },
+  });
+  return tasks.map(toTaskRecord);
 }
 
 export async function findCustomTaskById(taskId: string) {
-  const db = await readDb();
-  return db.customTasks.find((task) => task.id === taskId) ?? null;
+  const task = await prisma.customTask.findUnique({ where: { id: taskId } });
+  return task ? toTaskRecord(task) : null;
 }
 
 export async function createCustomTask(input: {
@@ -558,23 +691,19 @@ export async function createCustomTask(input: {
   answer: string;
   solution: string;
 }) {
-  const db = await readDb();
+  const task = await prisma.customTask.create({
+    data: {
+      id: `custom-${uid("task")}`,
+      lessonId: input.lessonId,
+      type: input.type,
+      question: input.question,
+      options: input.type === "choice" ? JSON.stringify(input.options ?? []) : null,
+      answer: input.answer,
+      solution: input.solution,
+    },
+  });
 
-  const task: CustomTaskRecord = {
-    id: `custom-${uid("task")}`,
-    lessonId: input.lessonId,
-    type: input.type,
-    question: input.question,
-    options: input.type === "choice" ? (input.options ?? []) : null,
-    answer: input.answer,
-    solution: input.solution,
-    createdAt: new Date().toISOString(),
-  };
-
-  db.customTasks.push(task);
-  await writeDb(db);
-
-  return task;
+  return toTaskRecord(task);
 }
 
 export async function updateCustomTask(
@@ -588,48 +717,311 @@ export async function updateCustomTask(
     lessonId?: string;
   },
 ) {
-  const db = await readDb();
-  const task = db.customTasks.find((item) => item.id === taskId);
-  if (!task) return null;
+  try {
+    const existing = await prisma.customTask.findUnique({ where: { id: taskId } });
+    if (!existing) return null;
 
-  if (typeof input.lessonId === "string") {
-    task.lessonId = input.lessonId;
-  }
-  if (typeof input.type === "string") {
-    task.type = input.type;
-    if (input.type === "numeric") {
-      task.options = null;
-    }
-  }
-  if (typeof input.question === "string") {
-    task.question = input.question;
-  }
-  if (typeof input.answer === "string") {
-    task.answer = input.answer;
-  }
-  if (typeof input.solution === "string") {
-    task.solution = input.solution;
-  }
-  if (input.options !== undefined) {
-    task.options = input.options;
-  }
+    const finalType = input.type ?? existing.type;
+    const nextOptions =
+      input.options !== undefined
+        ? input.options
+        : existing.options
+          ? (JSON.parse(existing.options) as string[])
+          : null;
 
-  if (task.type === "numeric") {
-    task.options = null;
-  } else {
-    task.options = task.options ?? [];
-  }
+    const task = await prisma.customTask.update({
+      where: { id: taskId },
+      data: {
+        lessonId: input.lessonId,
+        type: finalType,
+        question: input.question,
+        answer: input.answer,
+        solution: input.solution,
+        options: finalType === "choice" ? JSON.stringify(nextOptions ?? []) : null,
+      },
+    });
 
-  await writeDb(db);
-  return task;
+    return toTaskRecord(task);
+  } catch {
+    return null;
+  }
 }
 
 export async function deleteCustomTask(taskId: string) {
-  const db = await readDb();
-  const exists = db.customTasks.some((item) => item.id === taskId);
-  if (!exists) return false;
+  try {
+    await prisma.customTask.delete({ where: { id: taskId } });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
-  db.customTasks = db.customTasks.filter((item) => item.id !== taskId);
-  await writeDb(db);
-  return true;
+export async function createPasswordResetToken(input: {
+  userId: string;
+  tokenHash: string;
+  expiresAt: Date;
+}) {
+  const row = await prisma.passwordResetToken.create({
+    data: {
+      userId: input.userId,
+      tokenHash: input.tokenHash,
+      expiresAt: input.expiresAt,
+    },
+  });
+
+  return {
+    id: row.id,
+    userId: row.userId,
+    tokenHash: row.tokenHash,
+    expiresAt: row.expiresAt.toISOString(),
+    usedAt: null,
+    createdAt: row.createdAt.toISOString(),
+  } satisfies PasswordResetTokenRecord;
+}
+
+export async function findValidPasswordResetToken(tokenHash: string) {
+  const row = await prisma.passwordResetToken.findUnique({
+    where: { tokenHash },
+  });
+
+  if (!row || row.usedAt || row.expiresAt <= new Date()) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    userId: row.userId,
+    tokenHash: row.tokenHash,
+    expiresAt: row.expiresAt.toISOString(),
+    usedAt: null,
+    createdAt: row.createdAt.toISOString(),
+  } satisfies PasswordResetTokenRecord;
+}
+
+export async function markPasswordResetTokenUsed(tokenId: string) {
+  await prisma.passwordResetToken.update({
+    where: { id: tokenId },
+    data: { usedAt: new Date() },
+  });
+}
+
+export async function invalidateUserPasswordResetTokens(userId: string) {
+  await prisma.passwordResetToken.updateMany({
+    where: { userId, usedAt: null },
+    data: { usedAt: new Date() },
+  });
+}
+
+export async function updateUserPassword(userId: string, passwordHash: string) {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash },
+  });
+}
+
+export async function createPaymentIntent(input: {
+  userId: string;
+  planId: string;
+  amountCents: number;
+  currency?: string;
+  provider?: string;
+  providerPaymentId?: string | null;
+  metadata?: string | null;
+}) {
+  const checkoutToken = crypto.randomUUID();
+  const row = await prisma.paymentIntent.create({
+    data: {
+      userId: input.userId,
+      planId: input.planId,
+      amountCents: input.amountCents,
+      currency: input.currency ?? "RUB",
+      provider: input.provider ?? "mock",
+      providerPaymentId: input.providerPaymentId ?? null,
+      metadata: input.metadata ?? null,
+      checkoutToken,
+      status: "REQUIRES_ACTION",
+    },
+  });
+
+  return toPaymentRecord(row);
+}
+
+export async function findPaymentByCheckoutToken(checkoutToken: string) {
+  const row = await prisma.paymentIntent.findUnique({ where: { checkoutToken } });
+  return row ? toPaymentRecord(row) : null;
+}
+
+export async function markPaymentProcessing(checkoutToken: string) {
+  const row = await prisma.paymentIntent.update({
+    where: { checkoutToken },
+    data: { status: "PROCESSING" },
+  });
+  return toPaymentRecord(row);
+}
+
+export async function markPaymentSucceeded(checkoutToken: string) {
+  const row = await prisma.paymentIntent.update({
+    where: { checkoutToken },
+    data: { status: "SUCCEEDED", paidAt: new Date() },
+  });
+  return toPaymentRecord(row);
+}
+
+export async function markPaymentFailed(checkoutToken: string) {
+  const row = await prisma.paymentIntent.update({
+    where: { checkoutToken },
+    data: { status: "FAILED" },
+  });
+  return toPaymentRecord(row);
+}
+
+export async function createUserUpload(input: {
+  userId: string;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  storagePath: string;
+  extractedText?: string | null;
+}) {
+  const row = await prisma.userUpload.create({
+    data: {
+      userId: input.userId,
+      originalName: input.originalName,
+      mimeType: input.mimeType,
+      sizeBytes: input.sizeBytes,
+      storagePath: input.storagePath,
+      extractedText: input.extractedText ?? null,
+    },
+  });
+
+  return {
+    id: row.id,
+    userId: row.userId,
+    originalName: row.originalName,
+    mimeType: row.mimeType,
+    sizeBytes: row.sizeBytes,
+    storagePath: row.storagePath,
+    extractedText: row.extractedText,
+    createdAt: row.createdAt.toISOString(),
+  } satisfies UserUploadRecord;
+}
+
+export async function updateUserUploadText(uploadId: string, extractedText: string) {
+  const row = await prisma.userUpload.update({
+    where: { id: uploadId },
+    data: { extractedText },
+  });
+
+  return {
+    id: row.id,
+    userId: row.userId,
+    originalName: row.originalName,
+    mimeType: row.mimeType,
+    sizeBytes: row.sizeBytes,
+    storagePath: row.storagePath,
+    extractedText: row.extractedText,
+    createdAt: row.createdAt.toISOString(),
+  } satisfies UserUploadRecord;
+}
+
+export async function findUserUploadById(uploadId: string, userId: string) {
+  const row = await prisma.userUpload.findFirst({ where: { id: uploadId, userId } });
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    userId: row.userId,
+    originalName: row.originalName,
+    mimeType: row.mimeType,
+    sizeBytes: row.sizeBytes,
+    storagePath: row.storagePath,
+    extractedText: row.extractedText,
+    createdAt: row.createdAt.toISOString(),
+  } satisfies UserUploadRecord;
+}
+
+export async function listUserUploads(userId: string) {
+  const rows = await prisma.userUpload.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+  });
+
+  return rows.map((row) => ({
+    id: row.id,
+    userId: row.userId,
+    originalName: row.originalName,
+    mimeType: row.mimeType,
+    sizeBytes: row.sizeBytes,
+    storagePath: row.storagePath,
+    extractedText: row.extractedText,
+    createdAt: row.createdAt.toISOString(),
+  }));
+}
+
+export async function upsertLessonKnowledge(input: {
+  lessonId: string;
+  originalName: string;
+  mimeType: string;
+  storagePath: string;
+  extractedText: string;
+  summary?: string | null;
+  pageCount?: number | null;
+  textChars?: number;
+}) {
+  const row = await prisma.lessonKnowledge.upsert({
+    where: { lessonId: input.lessonId },
+    update: {
+      originalName: input.originalName,
+      mimeType: input.mimeType,
+      storagePath: input.storagePath,
+      extractedText: input.extractedText,
+      summary: input.summary ?? null,
+      pageCount: input.pageCount ?? null,
+      textChars: input.textChars ?? input.extractedText.length,
+    },
+    create: {
+      lessonId: input.lessonId,
+      originalName: input.originalName,
+      mimeType: input.mimeType,
+      storagePath: input.storagePath,
+      extractedText: input.extractedText,
+      summary: input.summary ?? null,
+      pageCount: input.pageCount ?? null,
+      textChars: input.textChars ?? input.extractedText.length,
+    },
+  });
+
+  return {
+    id: row.id,
+    lessonId: row.lessonId,
+    originalName: row.originalName,
+    mimeType: row.mimeType,
+    storagePath: row.storagePath,
+    extractedText: row.extractedText,
+    summary: row.summary,
+    pageCount: row.pageCount,
+    textChars: row.textChars,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  } satisfies LessonKnowledgeRecord;
+}
+
+export async function getLessonKnowledge(lessonId: string) {
+  const row = await prisma.lessonKnowledge.findUnique({ where: { lessonId } });
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    lessonId: row.lessonId,
+    originalName: row.originalName,
+    mimeType: row.mimeType,
+    storagePath: row.storagePath,
+    extractedText: row.extractedText,
+    summary: row.summary,
+    pageCount: row.pageCount,
+    textChars: row.textChars,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  } satisfies LessonKnowledgeRecord;
 }

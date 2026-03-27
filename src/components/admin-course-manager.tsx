@@ -26,6 +26,18 @@ type Lesson = {
   createdAt: string;
 };
 
+type LessonKnowledge = {
+  id: string;
+  lessonId: string;
+  originalName: string;
+  mimeType: string;
+  extractedText: string;
+  summary: string | null;
+  pageCount: number | null;
+  textChars: number;
+  updatedAt: string;
+};
+
 type CustomTask = {
   id: string;
   lessonId: string;
@@ -81,6 +93,9 @@ export function AdminCourseManager({
   const [lessons, setLessons] = useState<Lesson[]>(initialLessons);
   const [tasks, setTasks] = useState<CustomTask[]>(initialTasks);
   const [users, setUsers] = useState<AdminUser[]>(initialUsers);
+  const [selectedKnowledgeFiles, setSelectedKnowledgeFiles] = useState<Record<string, File | null>>({});
+  const [knowledgeStatus, setKnowledgeStatus] = useState<Record<string, string>>({});
+  const [lessonKnowledge, setLessonKnowledge] = useState<Record<string, LessonKnowledge | null>>({});
 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -147,6 +162,7 @@ export function AdminCourseManager({
 
     const data = (await response.json()) as Lesson[];
     setLessons(data);
+    await Promise.all(data.map((lesson) => loadLessonKnowledgeByLessonId(lesson.id)));
   }
 
   async function loadTasks() {
@@ -167,6 +183,51 @@ export function AdminCourseManager({
 
   async function refreshAll() {
     await Promise.all([loadCourses(), loadSections(), loadLessons(), loadTasks(), loadUsers()]);
+  }
+
+  async function loadLessonKnowledgeByLessonId(lessonId: string) {
+    const response = await fetch(`/api/admin/lessons/${lessonId}/knowledge`, { cache: "no-store" });
+    if (!response.ok) return;
+
+    const data = (await response.json()) as { knowledge?: LessonKnowledge | null };
+    setLessonKnowledge((current) => ({ ...current, [lessonId]: data.knowledge ?? null }));
+  }
+
+  async function uploadLessonKnowledge(lesson: Lesson) {
+    const file = selectedKnowledgeFiles[lesson.id];
+    if (!file) {
+      setError("Выберите файл перед загрузкой");
+      return;
+    }
+
+    setKnowledgeStatus((current) => ({ ...current, [lesson.id]: "Идет OCR и анализ файла..." }));
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await fetch(`/api/admin/lessons/${lesson.id}/knowledge`, {
+      method: "POST",
+      body: formData,
+    });
+    const data = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      knowledge?: LessonKnowledge;
+    };
+
+    if (!response.ok || !data.knowledge) {
+      setKnowledgeStatus((current) => ({
+        ...current,
+        [lesson.id]: data.error ?? "Не удалось загрузить файл теории",
+      }));
+      return;
+    }
+
+    setLessonKnowledge((current) => ({ ...current, [lesson.id]: data.knowledge ?? null }));
+    setSelectedKnowledgeFiles((current) => ({ ...current, [lesson.id]: null }));
+    const pageLabel =
+      data.knowledge.pageCount && data.knowledge.pageCount > 0
+        ? ` · страниц: ${data.knowledge.pageCount}`
+        : "";
+    setKnowledgeStatus((current) => ({ ...current, [lesson.id]: `Файл теории обновлен${pageLabel}` }));
   }
 
   async function onCourseSubmit(event: FormEvent<HTMLFormElement>) {
@@ -770,6 +831,47 @@ export function AdminCourseManager({
                                   </div>
 
                                   <div className="mt-2 space-y-2">
+                                    <div className="rounded border border-slate-200 bg-white p-2">
+                                      <p className="text-xs font-medium text-slate-700">Файл теории для AI-чата урока</p>
+                                      <p className="text-xs text-slate-500">
+                                        {lessonKnowledge[lesson.id]
+                                          ? `Текущий файл: ${lessonKnowledge[lesson.id]?.originalName}`
+                                          : "Файл еще не загружен"}
+                                      </p>
+                                      {lessonKnowledge[lesson.id] ? (
+                                        <p className="text-xs text-slate-500">
+                                          Индикатор: {lessonKnowledge[lesson.id]?.pageCount ?? "?"} стр. ·{" "}
+                                          {lessonKnowledge[lesson.id]?.textChars ?? 0} символов
+                                        </p>
+                                      ) : null}
+                                      {lessonKnowledge[lesson.id]?.summary ? (
+                                        <p className="mt-1 rounded border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">
+                                          Выжимка: {lessonKnowledge[lesson.id]?.summary}
+                                        </p>
+                                      ) : null}
+                                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                                        <input
+                                          type="file"
+                                          className="text-xs"
+                                          onChange={(event) =>
+                                            setSelectedKnowledgeFiles((current) => ({
+                                              ...current,
+                                              [lesson.id]: event.target.files?.[0] ?? null,
+                                            }))
+                                          }
+                                        />
+                                        <button
+                                          type="button"
+                                          className="btn-ghost px-2 py-1 text-xs"
+                                          onClick={() => void uploadLessonKnowledge(lesson)}
+                                        >
+                                          Загрузить теорию
+                                        </button>
+                                      </div>
+                                      {knowledgeStatus[lesson.id] ? (
+                                        <p className="mt-1 text-xs text-slate-600">{knowledgeStatus[lesson.id]}</p>
+                                      ) : null}
+                                    </div>
                                     {relatedTasks.length === 0 ? (
                                       <p className="text-xs text-slate-500">Задания пока не добавлены.</p>
                                     ) : (

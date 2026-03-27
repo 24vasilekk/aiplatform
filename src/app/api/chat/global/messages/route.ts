@@ -7,6 +7,7 @@ import { generateAiReply } from "@/lib/ai";
 const schema = z.object({
   message: z.string().trim().min(1),
   mode: z.enum(["default", "beginner", "similar_task"]).default("default"),
+  attachmentContext: z.string().trim().max(8000).optional(),
 });
 
 export async function GET(request: NextRequest) {
@@ -45,6 +46,7 @@ export async function POST(request: NextRequest) {
     message: parsed.data.message,
     mode: parsed.data.mode,
     context: "global-ege-chat",
+    attachmentContext: parsed.data.attachmentContext,
   });
 
   try {

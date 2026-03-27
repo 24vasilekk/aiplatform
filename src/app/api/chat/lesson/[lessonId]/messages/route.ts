@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/api-auth";
-import { addChatMessage, listChatMessages } from "@/lib/db";
+import { addChatMessage, getLessonKnowledge, listChatMessages } from "@/lib/db";
 import { generateAiReply } from "@/lib/ai";
 
 const schema = z.object({
   message: z.string().trim().min(1),
   mode: z.enum(["default", "beginner", "similar_task"]).default("default"),
+  attachmentContext: z.string().trim().max(8000).optional(),
 });
 
 export async function GET(
@@ -48,10 +49,16 @@ export async function POST(
     return NextResponse.json({ error: "Пустое сообщение" }, { status: 400 });
   }
 
+  const knowledge = await getLessonKnowledge(lessonId);
+  const contextualAttachment = [knowledge?.extractedText ? `Теория урока:\n${knowledge.extractedText}` : "", parsed.data.attachmentContext ?? ""]
+    .filter(Boolean)
+    .join("\n\n");
+
   const aiReply = await generateAiReply({
     message: parsed.data.message,
     mode: parsed.data.mode,
     context: `lesson:${lessonId}`,
+    attachmentContext: contextualAttachment || undefined,
   });
 
   try {
