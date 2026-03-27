@@ -7,7 +7,7 @@ import { generateAiReply } from "@/lib/ai";
 const schema = z.object({
   message: z.string().trim().min(1),
   mode: z.enum(["default", "beginner", "similar_task"]).default("default"),
-  attachmentContext: z.string().trim().max(8000).optional(),
+  attachmentContext: z.string().trim().max(8000).nullable().optional(),
 });
 
 export async function GET(request: NextRequest) {

@@ -51,7 +51,11 @@ export function GlobalChat() {
       const response = await fetch("/api/chat/global/messages", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: trimmed, mode, attachmentContext }),
+        body: JSON.stringify({
+          message: trimmed,
+          mode,
+          ...(attachmentContext ? { attachmentContext } : {}),
+        }),
       });
 
       if (!response.ok) {
