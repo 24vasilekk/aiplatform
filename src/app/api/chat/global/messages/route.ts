@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
     message: parsed.data.message,
     mode: parsed.data.mode,
     context: "global-ege-chat",
-    attachmentContext: parsed.data.attachmentContext,
+    attachmentContext: parsed.data.attachmentContext ?? undefined,
   });
 
   try {
