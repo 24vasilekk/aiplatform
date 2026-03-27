@@ -25,10 +25,7 @@ export function LessonWorkspace({
   const [message, setMessage] = useState("");
   const [mode, setMode] = useState<"default" | "beginner" | "similar_task">("default");
   const [loading, setLoading] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [attachmentContext, setAttachmentContext] = useState<string | null>(null);
-  const [attachmentStatus, setAttachmentStatus] = useState<string | null>(null);
-  const [processingAttachment, setProcessingAttachment] = useState(false);
+  const [sendStatus, setSendStatus] = useState<string | null>(null);
 
   const quickModes = useMemo(
     () => [
@@ -38,6 +35,16 @@ export function LessonWorkspace({
     ] as const,
     [],
   );
+
+  function applyMode(nextMode: "default" | "beginner" | "similar_task") {
+    setMode(nextMode);
+    setMessage((current) => {
+      if (current.trim().length > 0) return current;
+      if (nextMode === "beginner") return "Объясни как для новичка: ";
+      if (nextMode === "similar_task") return "Дай похожую задачу по теме урока: ";
+      return "";
+    });
+  }
 
   useEffect(() => {
     async function init() {
@@ -80,13 +87,21 @@ export function LessonWorkspace({
     if (!trimmed || loading) return;
 
     setLoading(true);
-    const response = await fetch(`/api/chat/lesson/${lessonId}/messages`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ message: trimmed, mode, attachmentContext }),
-    });
+    setSendStatus(null);
 
-    if (response.ok) {
+    try {
+      const response = await fetch(`/api/chat/lesson/${lessonId}/messages`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: trimmed, mode }),
+      });
+
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { error?: string };
+        setSendStatus(data.error ?? `Ошибка отправки (HTTP ${response.status})`);
+        return;
+      }
+
       const data = (await response.json()) as { message: Message };
       setMessages((current) => [
         ...current,
@@ -100,66 +115,10 @@ export function LessonWorkspace({
         data.message,
       ]);
       setMessage("");
-      setAttachmentContext(null);
-      setAttachmentStatus(null);
-      setSelectedFile(null);
-    }
-
-    setLoading(false);
-  }
-
-  async function uploadAttachment() {
-    if (!selectedFile || processingAttachment) return;
-
-    setProcessingAttachment(true);
-    setAttachmentStatus("Загружаем файл...");
-
-    try {
-      const formData = new FormData();
-      formData.append("file", selectedFile);
-
-      const uploadResponse = await fetch("/api/uploads", {
-        method: "POST",
-        body: formData,
-      });
-      const uploadData = (await uploadResponse.json().catch(() => ({}))) as {
-        upload?: { id: string; originalName: string };
-        error?: string;
-      };
-
-      if (!uploadResponse.ok || !uploadData.upload) {
-        setAttachmentStatus(uploadData.error ?? "Не удалось загрузить файл");
-        return;
-      }
-
-      setAttachmentStatus("Извлекаем текст и проверяем таймкоды...");
-      const analyzeResponse = await fetch("/api/ai/attachments/analyze", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ uploadId: uploadData.upload.id }),
-      });
-      const analyzeData = (await analyzeResponse.json().catch(() => ({}))) as {
-        context?: string;
-        hasOutOfRangeTimecodes?: boolean;
-        outOfRangeTimecodes?: string[];
-        error?: string;
-      };
-
-      if (!analyzeResponse.ok || !analyzeData.context) {
-        setAttachmentStatus(analyzeData.error ?? "Не удалось обработать файл");
-        return;
-      }
-
-      setAttachmentContext(analyzeData.context);
-      setAttachmentStatus(
-        analyzeData.hasOutOfRangeTimecodes
-          ? `Файл обработан. Вне диапазона: ${analyzeData.outOfRangeTimecodes?.join(", ") ?? "есть"}.`
-          : "Файл обработан. Контекст добавится к следующему сообщению.",
-      );
     } catch {
-      setAttachmentStatus("Сетевая ошибка при обработке файла");
+      setSendStatus("Сетевая ошибка: не удалось отправить сообщение.");
     } finally {
-      setProcessingAttachment(false);
+      setLoading(false);
     }
   }
 
@@ -239,7 +198,7 @@ export function LessonWorkspace({
                   ? "rounded-md border border-sky-500 bg-sky-500 px-2 py-1 text-xs text-white"
                   : "rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:border-sky-400 hover:text-sky-700"
               }
-              onClick={() => setMode(item.id)}
+              onClick={() => applyMode(item.id)}
             >
               {item.label}
             </button>
@@ -267,42 +226,10 @@ export function LessonWorkspace({
           value={message}
           onChange={(event) => setMessage(event.target.value)}
         />
-        <div className="space-y-2 rounded-lg border border-slate-200 p-3">
-          <div className="flex items-center gap-2">
-            <input
-              id="lesson-chat-file"
-              type="file"
-              className="hidden"
-              onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
-            />
-            <label
-              htmlFor="lesson-chat-file"
-              className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:border-sky-400 hover:text-sky-700"
-              title="Прикрепить фото/файл"
-              aria-label="Прикрепить фото/файл"
-            >
-              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M4 7h4l2-2h4l2 2h4v12H4z" />
-                <circle cx="12" cy="13" r="4" />
-              </svg>
-            </label>
-            <p className="min-w-0 flex-1 truncate text-xs text-slate-600">
-              {selectedFile ? selectedFile.name : "Фото/файл для OCR"}
-            </p>
-            <button
-              type="button"
-              className="btn-ghost px-3 py-2 text-sm"
-              onClick={uploadAttachment}
-              disabled={!selectedFile || processingAttachment}
-            >
-              {processingAttachment ? "..." : "OCR"}
-            </button>
-          </div>
-          {attachmentStatus ? <p className="text-xs text-slate-600">{attachmentStatus}</p> : null}
-        </div>
         <button type="button" className="w-full" onClick={send} disabled={loading}>
           {loading ? "Отправка..." : "Отправить"}
         </button>
+        {sendStatus ? <p className="text-sm text-rose-600">{sendStatus}</p> : null}
       </aside>
     </div>
   );

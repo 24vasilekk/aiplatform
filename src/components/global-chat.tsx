@@ -16,10 +16,17 @@ export function GlobalChat() {
   const [message, setMessage] = useState("");
   const [mode, setMode] = useState<"default" | "beginner" | "similar_task">("default");
   const [loading, setLoading] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [attachmentContext, setAttachmentContext] = useState<string | null>(null);
-  const [attachmentStatus, setAttachmentStatus] = useState<string | null>(null);
-  const [processingAttachment, setProcessingAttachment] = useState(false);
+  const [sendStatus, setSendStatus] = useState<string | null>(null);
+
+  function applyMode(nextMode: "default" | "beginner" | "similar_task") {
+    setMode(nextMode);
+    setMessage((current) => {
+      if (current.trim().length > 0) return current;
+      if (nextMode === "beginner") return "Объясни как для новичка: ";
+      if (nextMode === "similar_task") return "Дай похожую задачу по теме: ";
+      return "";
+    });
+  }
 
   useEffect(() => {
     async function load() {
@@ -37,76 +44,32 @@ export function GlobalChat() {
     if (!trimmed || loading) return;
 
     setLoading(true);
-    const response = await fetch("/api/chat/global/messages", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ message: trimmed, mode, attachmentContext }),
-    });
-
-    if (response.ok) {
-      const data = (await response.json()) as { message: Message };
-      setMessages((current) => [...current, { id: crypto.randomUUID(), role: "user", content: trimmed, mode, createdAt: new Date().toISOString() }, data.message]);
-      setMessage("");
-      setAttachmentContext(null);
-      setAttachmentStatus(null);
-      setSelectedFile(null);
-    }
-
-    setLoading(false);
-  }
-
-  async function uploadAttachment() {
-    if (!selectedFile || processingAttachment) return;
-
-    setProcessingAttachment(true);
-    setAttachmentStatus("Загружаем файл...");
+    setSendStatus(null);
 
     try {
-      const formData = new FormData();
-      formData.append("file", selectedFile);
-
-      const uploadResponse = await fetch("/api/uploads", {
-        method: "POST",
-        body: formData,
-      });
-      const uploadData = (await uploadResponse.json().catch(() => ({}))) as {
-        upload?: { id: string; originalName: string };
-        error?: string;
-      };
-
-      if (!uploadResponse.ok || !uploadData.upload) {
-        setAttachmentStatus(uploadData.error ?? "Не удалось загрузить файл");
-        return;
-      }
-
-      setAttachmentStatus("Извлекаем текст и проверяем таймкоды...");
-      const analyzeResponse = await fetch("/api/ai/attachments/analyze", {
+      const response = await fetch("/api/chat/global/messages", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ uploadId: uploadData.upload.id }),
+        body: JSON.stringify({ message: trimmed, mode }),
       });
-      const analyzeData = (await analyzeResponse.json().catch(() => ({}))) as {
-        context?: string;
-        hasOutOfRangeTimecodes?: boolean;
-        outOfRangeTimecodes?: string[];
-        error?: string;
-      };
 
-      if (!analyzeResponse.ok || !analyzeData.context) {
-        setAttachmentStatus(analyzeData.error ?? "Не удалось обработать файл");
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { error?: string };
+        setSendStatus(data.error ?? `Ошибка отправки (HTTP ${response.status})`);
         return;
       }
 
-      setAttachmentContext(analyzeData.context);
-      setAttachmentStatus(
-        analyzeData.hasOutOfRangeTimecodes
-          ? `Файл обработан. Вне диапазона: ${analyzeData.outOfRangeTimecodes?.join(", ") ?? "есть"}.`
-          : "Файл обработан. Контекст добавится к следующему сообщению.",
-      );
+      const data = (await response.json()) as { message: Message };
+      setMessages((current) => [
+        ...current,
+        { id: crypto.randomUUID(), role: "user", content: trimmed, mode, createdAt: new Date().toISOString() },
+        data.message,
+      ]);
+      setMessage("");
     } catch {
-      setAttachmentStatus("Сетевая ошибка при обработке файла");
+      setSendStatus("Сетевая ошибка: не удалось отправить сообщение.");
     } finally {
-      setProcessingAttachment(false);
+      setLoading(false);
     }
   }
 
@@ -117,21 +80,21 @@ export function GlobalChat() {
         <button
           type="button"
           className={mode === "default" ? "btn-primary" : "btn-ghost"}
-          onClick={() => setMode("default")}
+          onClick={() => applyMode("default")}
         >
           Обычный
         </button>
         <button
           type="button"
           className={mode === "beginner" ? "btn-primary" : "btn-ghost"}
-          onClick={() => setMode("beginner")}
+          onClick={() => applyMode("beginner")}
         >
           Для новичка
         </button>
         <button
           type="button"
           className={mode === "similar_task" ? "btn-primary" : "btn-ghost"}
-          onClick={() => setMode("similar_task")}
+          onClick={() => applyMode("similar_task")}
         >
           Похожая задача
         </button>
@@ -152,42 +115,10 @@ export function GlobalChat() {
         ))}
       </div>
       <textarea rows={4} className="w-full" value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Спросите что угодно по ЕГЭ" />
-      <div className="space-y-2 rounded-lg border border-slate-200 p-3">
-        <div className="flex items-center gap-2">
-          <input
-            id="global-chat-file"
-            type="file"
-            className="hidden"
-            onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
-          />
-          <label
-            htmlFor="global-chat-file"
-            className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:border-sky-400 hover:text-sky-700"
-            title="Прикрепить фото/файл"
-            aria-label="Прикрепить фото/файл"
-          >
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M4 7h4l2-2h4l2 2h4v12H4z" />
-              <circle cx="12" cy="13" r="4" />
-            </svg>
-          </label>
-          <p className="min-w-0 flex-1 truncate text-xs text-slate-600">
-            {selectedFile ? selectedFile.name : "Фото/файл для OCR"}
-          </p>
-          <button
-            type="button"
-            className="btn-ghost px-3 py-2 text-sm"
-            onClick={uploadAttachment}
-            disabled={!selectedFile || processingAttachment}
-          >
-            {processingAttachment ? "..." : "OCR"}
-          </button>
-        </div>
-        {attachmentStatus ? <p className="text-xs text-slate-600">{attachmentStatus}</p> : null}
-      </div>
       <button type="button" onClick={send} disabled={loading}>
         {loading ? "Отправка..." : "Отправить"}
       </button>
+      {sendStatus ? <p className="text-sm text-rose-600">{sendStatus}</p> : null}
     </section>
   );
 }
