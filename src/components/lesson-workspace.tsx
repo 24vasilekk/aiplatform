@@ -40,6 +40,12 @@ export function LessonWorkspace({
 
   function applyMode(nextMode: "default" | "beginner" | "similar_task") {
     setMode(nextMode);
+    setSendStatus(null);
+    setMessage((current) => {
+      if (current.trim().length > 0) return current;
+      if (nextMode === "beginner") return "Объясни как для новичка: ";
+      return "";
+    });
   }
 
   useEffect(() => {
@@ -88,6 +94,28 @@ export function LessonWorkspace({
 
     setLoading(true);
     setSendStatus(null);
+    const userDraftId = crypto.randomUUID();
+    const typingId = `typing-${crypto.randomUUID()}`;
+    const nextMode = mode;
+
+    setMessages((current) => [
+      ...current,
+      {
+        id: userDraftId,
+        role: "user",
+        content: trimmed,
+        mode: nextMode,
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: typingId,
+        role: "assistant",
+        content: "...",
+        mode: nextMode,
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+    setMessage("");
 
     try {
       const response = await fetch(`/api/chat/lesson/${lessonId}/messages`, {
@@ -95,7 +123,7 @@ export function LessonWorkspace({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           message: trimmed,
-          mode,
+          mode: nextMode,
           ...(attachmentContext ? { attachmentContext } : {}),
         }),
       });
@@ -103,26 +131,19 @@ export function LessonWorkspace({
       if (!response.ok) {
         const data = (await response.json().catch(() => ({}))) as { error?: string };
         setSendStatus(data.error ?? `Ошибка отправки (HTTP ${response.status})`);
+        setMessages((current) => current.filter((item) => item.id !== userDraftId && item.id !== typingId));
+        setMessage(trimmed);
         return;
       }
 
       const data = (await response.json()) as { message: Message };
-      setMessages((current) => [
-        ...current,
-        {
-          id: crypto.randomUUID(),
-          role: "user",
-          content: trimmed,
-          mode,
-          createdAt: new Date().toISOString(),
-        },
-        data.message,
-      ]);
-      setMessage("");
+      setMessages((current) => current.map((item) => (item.id === typingId ? data.message : item)));
       setAttachmentContext(null);
       setAttachmentStatus(null);
     } catch {
       setSendStatus("Сетевая ошибка: не удалось отправить сообщение.");
+      setMessages((current) => current.filter((item) => item.id !== userDraftId && item.id !== typingId));
+      setMessage(trimmed);
     } finally {
       setLoading(false);
     }
@@ -288,7 +309,10 @@ export function LessonWorkspace({
             className="w-full pr-12"
             placeholder="Задайте вопрос AI по теме урока"
             value={message}
-            onChange={(event) => setMessage(event.target.value)}
+            onChange={(event) => {
+              setMessage(event.target.value);
+              if (sendStatus) setSendStatus(null);
+            }}
           />
           <label
             htmlFor="lesson-chat-photo"
