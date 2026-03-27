@@ -268,18 +268,36 @@ export function LessonWorkspace({
           onChange={(event) => setMessage(event.target.value)}
         />
         <div className="space-y-2 rounded-lg border border-slate-200 p-3">
-          <label className="text-sm font-medium text-slate-700" htmlFor="lesson-chat-file">
-            Фото/файл для OCR и анализа
-          </label>
-          <input
-            id="lesson-chat-file"
-            type="file"
-            className="w-full text-sm"
-            onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
-          />
-          <button type="button" className="btn-ghost" onClick={uploadAttachment} disabled={!selectedFile || processingAttachment}>
-            {processingAttachment ? "Обработка..." : "Загрузить и обработать"}
-          </button>
+          <div className="flex items-center gap-2">
+            <input
+              id="lesson-chat-file"
+              type="file"
+              className="hidden"
+              onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+            />
+            <label
+              htmlFor="lesson-chat-file"
+              className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:border-sky-400 hover:text-sky-700"
+              title="Прикрепить фото/файл"
+              aria-label="Прикрепить фото/файл"
+            >
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M4 7h4l2-2h4l2 2h4v12H4z" />
+                <circle cx="12" cy="13" r="4" />
+              </svg>
+            </label>
+            <p className="min-w-0 flex-1 truncate text-xs text-slate-600">
+              {selectedFile ? selectedFile.name : "Фото/файл для OCR"}
+            </p>
+            <button
+              type="button"
+              className="btn-ghost px-3 py-2 text-sm"
+              onClick={uploadAttachment}
+              disabled={!selectedFile || processingAttachment}
+            >
+              {processingAttachment ? "..." : "OCR"}
+            </button>
+          </div>
           {attachmentStatus ? <p className="text-xs text-slate-600">{attachmentStatus}</p> : null}
         </div>
         <button type="button" className="w-full" onClick={send} disabled={loading}>

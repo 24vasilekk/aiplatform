@@ -96,6 +96,8 @@ export function AdminCourseManager({
   const [selectedKnowledgeFiles, setSelectedKnowledgeFiles] = useState<Record<string, File | null>>({});
   const [knowledgeStatus, setKnowledgeStatus] = useState<Record<string, string>>({});
   const [lessonKnowledge, setLessonKnowledge] = useState<Record<string, LessonKnowledge | null>>({});
+  const [adminTab, setAdminTab] = useState<"builder" | "content" | "users">("builder");
+  const [builderStep, setBuilderStep] = useState<1 | 2 | 3 | 4>(1);
 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -535,8 +537,85 @@ export function AdminCourseManager({
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 xl:grid-cols-2">
-        <form className="panel-accent space-y-3" onSubmit={onCourseSubmit}>
+      <div className="panel-accent space-y-3">
+        <h2 className="text-lg font-semibold">Админ-режим</h2>
+        <div className="choice-group" role="tablist" aria-label="Разделы админки">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={adminTab === "builder"}
+            className={`choice-chip ${adminTab === "builder" ? "choice-chip-active" : ""}`}
+            onClick={() => setAdminTab("builder")}
+          >
+            Конструктор
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={adminTab === "content"}
+            className={`choice-chip ${adminTab === "content" ? "choice-chip-active" : ""}`}
+            onClick={() => setAdminTab("content")}
+          >
+            Контент
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={adminTab === "users"}
+            className={`choice-chip ${adminTab === "users" ? "choice-chip-active" : ""}`}
+            onClick={() => setAdminTab("users")}
+          >
+            Пользователи
+          </button>
+        </div>
+      </div>
+
+      {adminTab === "builder" ? (
+        <>
+          <div className="panel-accent space-y-3">
+            <p className="text-sm font-medium text-slate-700">Пошаговое создание</p>
+            <div className="choice-group" role="tablist" aria-label="Шаги конструктора">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={builderStep === 1}
+                className={`choice-chip ${builderStep === 1 ? "choice-chip-active" : ""}`}
+                onClick={() => setBuilderStep(1)}
+              >
+                1. Курс
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={builderStep === 2}
+                className={`choice-chip ${builderStep === 2 ? "choice-chip-active" : ""}`}
+                onClick={() => setBuilderStep(2)}
+              >
+                2. Раздел
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={builderStep === 3}
+                className={`choice-chip ${builderStep === 3 ? "choice-chip-active" : ""}`}
+                onClick={() => setBuilderStep(3)}
+              >
+                3. Урок
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={builderStep === 4}
+                className={`choice-chip ${builderStep === 4 ? "choice-chip-active" : ""}`}
+                onClick={() => setBuilderStep(4)}
+              >
+                4. Задание
+              </button>
+            </div>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-2">
+        {builderStep === 1 ? <form className="panel-accent space-y-3" onSubmit={onCourseSubmit}>
           <h2 className="text-lg font-semibold">1. Создать курс</h2>
           <input
             type="text"
@@ -577,9 +656,9 @@ export function AdminCourseManager({
           <button type="submit" className="btn-primary" disabled={loading}>
             {loading ? "Создание..." : "Создать курс"}
           </button>
-        </form>
+        </form> : null}
 
-        <form className="panel-accent space-y-3" onSubmit={onSectionSubmit}>
+        {builderStep === 2 ? <form className="panel-accent space-y-3" onSubmit={onSectionSubmit}>
           <h2 className="text-lg font-semibold">2. Создать раздел</h2>
           {courses.length === 0 ? (
             <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
@@ -612,9 +691,9 @@ export function AdminCourseManager({
           <button type="submit" className="btn-primary" disabled={loading || courses.length === 0}>
             {loading ? "Создание..." : "Создать раздел"}
           </button>
-        </form>
+        </form> : null}
 
-        <form className="panel-accent space-y-3" onSubmit={onLessonSubmit}>
+        {builderStep === 3 ? <form className="panel-accent space-y-3" onSubmit={onLessonSubmit}>
           <h2 className="text-lg font-semibold">3. Создать урок</h2>
           {sections.length === 0 ? (
             <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
@@ -663,9 +742,9 @@ export function AdminCourseManager({
           <button type="submit" className="btn-primary" disabled={loading || sections.length === 0}>
             {loading ? "Создание..." : "Создать урок"}
           </button>
-        </form>
+        </form> : null}
 
-        <form className="panel-accent space-y-3" onSubmit={onTaskSubmit}>
+        {builderStep === 4 ? <form className="panel-accent space-y-3" onSubmit={onTaskSubmit}>
           <h2 className="text-lg font-semibold">4. Создать задание (часть 1)</h2>
           {lessons.length === 0 ? (
             <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
@@ -749,12 +828,14 @@ export function AdminCourseManager({
           <button type="submit" className="btn-primary" disabled={loading || lessons.length === 0}>
             {loading ? "Создание..." : "Создать задание"}
           </button>
-        </form>
-      </div>
+        </form> : null}
+          </div>
+        </>
+      ) : null}
 
       {error ? <p className="text-sm text-rose-600">{error}</p> : null}
 
-      <section className="panel-accent">
+      {adminTab === "content" ? <section className="panel-accent">
         <h2 className="mb-2 text-lg font-semibold">Созданные курсы/разделы/уроки/задания</h2>
         {courses.length === 0 ? <p className="text-sm text-slate-500">Пока нет созданных курсов.</p> : null}
 
@@ -920,9 +1001,9 @@ export function AdminCourseManager({
             );
           })}
         </ul>
-      </section>
+      </section> : null}
 
-      <section className="panel-accent">
+      {adminTab === "users" ? <section className="panel-accent">
         <h2 className="mb-2 text-lg font-semibold">Пользователи</h2>
         {users.length === 0 ? (
           <p className="text-sm text-slate-500">Пока пользователей нет.</p>
@@ -936,7 +1017,7 @@ export function AdminCourseManager({
             ))}
           </ul>
         )}
-      </section>
+      </section> : null}
     </div>
   );
 }
