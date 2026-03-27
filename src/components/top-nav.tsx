@@ -22,15 +22,17 @@ export function TopNav() {
             EGE AI Platform
           </Link>
 
-          <button
-            type="button"
-            className="rounded-lg px-4 py-2 text-sm text-slate-700 md:hidden"
-            onClick={() => setOpen((current) => !current)}
-            aria-expanded={open}
-            aria-controls="mobile-nav"
-          >
-            {open ? "Закрыть" : "Меню"}
-          </button>
+          <div className="md:hidden">
+            <button
+              type="button"
+              className="rounded-lg px-4 py-2 text-sm text-slate-700"
+              onClick={() => setOpen((current) => !current)}
+              aria-expanded={open}
+              aria-controls="mobile-nav"
+            >
+              {open ? "Закрыть" : "Меню"}
+            </button>
+          </div>
 
           <nav className="hidden items-center gap-2 text-sm text-slate-700 md:flex">
             {links.map((link) => (

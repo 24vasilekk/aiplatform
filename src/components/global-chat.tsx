@@ -23,12 +23,6 @@ export function GlobalChat() {
 
   function applyMode(nextMode: "default" | "beginner" | "similar_task") {
     setMode(nextMode);
-    setMessage((current) => {
-      if (current.trim().length > 0) return current;
-      if (nextMode === "beginner") return "Объясни как для новичка: ";
-      if (nextMode === "similar_task") return "Дай похожую задачу по теме: ";
-      return "";
-    });
   }
 
   useEffect(() => {
@@ -44,7 +38,11 @@ export function GlobalChat() {
 
   async function send() {
     const trimmed = message.trim();
-    if (!trimmed || loading) return;
+    if (loading) return;
+    if (!trimmed) {
+      setSendStatus("Введите сообщение перед отправкой.");
+      return;
+    }
 
     setLoading(true);
     setSendStatus(null);
@@ -128,24 +126,10 @@ export function GlobalChat() {
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          className={mode === "default" ? "btn-primary" : "btn-ghost"}
-          onClick={() => applyMode("default")}
-        >
-          Обычный
-        </button>
-        <button
-          type="button"
-          className={mode === "beginner" ? "btn-primary" : "btn-ghost"}
+          className={mode === "beginner" ? "btn-primary px-3 py-1.5 text-xs" : "btn-ghost px-3 py-1.5 text-xs"}
           onClick={() => applyMode("beginner")}
         >
-          Для новичка
-        </button>
-        <button
-          type="button"
-          className={mode === "similar_task" ? "btn-primary" : "btn-ghost"}
-          onClick={() => applyMode("similar_task")}
-        >
-          Похожая задача
+          Объясни как для новичка
         </button>
       </div>
       <div className="max-h-[320px] space-y-2 overflow-y-auto rounded-xl border border-sky-200 bg-white p-3 sm:max-h-[420px] sm:p-4">
@@ -163,7 +147,7 @@ export function GlobalChat() {
           </div>
         ))}
       </div>
-      <div className="flex items-end gap-2">
+      <div className="relative">
         <input
           id="global-chat-photo"
           type="file"
@@ -177,24 +161,24 @@ export function GlobalChat() {
             event.currentTarget.value = "";
           }}
         />
-        <label
-          htmlFor="global-chat-photo"
-          className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 shadow-sm transition-[transform,box-shadow,background-color,border-color,color,opacity] duration-200 ease-out hover:border-sky-400 hover:bg-sky-50 hover:text-sky-700 hover:shadow-[0_4px_10px_rgba(15,23,42,0.08)] active:scale-[0.98]"
-          title="Отправить фото"
-          aria-label="Отправить фото"
-        >
-          <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M4 7h4l2-2h4l2 2h4v12H4z" />
-            <circle cx="12" cy="13" r="4" />
-          </svg>
-        </label>
         <textarea
           rows={4}
-          className="w-full"
+          className="w-full pr-12"
           value={message}
           onChange={(event) => setMessage(event.target.value)}
           placeholder="Спросите что угодно по ЕГЭ"
         />
+        <label
+          htmlFor="global-chat-photo"
+          className="absolute right-2 bottom-2 flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 shadow-sm transition-[transform,box-shadow,background-color,border-color,color,opacity] duration-200 ease-out hover:border-sky-400 hover:bg-sky-50 hover:text-sky-700 hover:shadow-[0_4px_10px_rgba(15,23,42,0.08)] active:scale-[0.98]"
+          title="Отправить фото"
+          aria-label="Отправить фото"
+        >
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M4 7h4l2-2h4l2 2h4v12H4z" />
+            <circle cx="12" cy="13" r="4" />
+          </svg>
+        </label>
       </div>
       <button type="button" onClick={send} disabled={loading || processingAttachment}>
         {loading ? "Отправка..." : "Отправить"}

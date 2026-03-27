@@ -31,22 +31,15 @@ export function LessonWorkspace({
   const [processingAttachment, setProcessingAttachment] = useState(false);
 
   const quickModes = useMemo(
-    () => [
-      { id: "default", label: "Обычный" },
-      { id: "beginner", label: "Объясни как для новичка" },
-      { id: "similar_task", label: "Дай похожую задачу" },
-    ] as const,
+    () =>
+      [
+        { id: "beginner", label: "Для новичка" },
+      ] as const,
     [],
   );
 
   function applyMode(nextMode: "default" | "beginner" | "similar_task") {
     setMode(nextMode);
-    setMessage((current) => {
-      if (current.trim().length > 0) return current;
-      if (nextMode === "beginner") return "Объясни как для новичка: ";
-      if (nextMode === "similar_task") return "Дай похожую задачу по теме урока: ";
-      return "";
-    });
   }
 
   useEffect(() => {
@@ -87,7 +80,11 @@ export function LessonWorkspace({
 
   async function send() {
     const trimmed = message.trim();
-    if (!trimmed || loading) return;
+    if (loading) return;
+    if (!trimmed) {
+      setSendStatus("Введите сообщение перед отправкой.");
+      return;
+    }
 
     setLoading(true);
     setSendStatus(null);
@@ -244,8 +241,8 @@ export function LessonWorkspace({
               type="button"
               className={
                 mode === item.id
-                  ? "inline-flex items-center justify-center rounded-lg border border-sky-500 bg-sky-500 px-3 py-2 text-sm font-medium text-white shadow-sm transition-[transform,box-shadow,background-color,border-color,color,opacity] duration-200 ease-out hover:border-sky-400 hover:bg-sky-400 hover:shadow-[0_4px_10px_rgba(14,165,233,0.24)] active:scale-[0.98]"
-                  : "inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition-[transform,box-shadow,background-color,border-color,color,opacity] duration-200 ease-out hover:border-sky-400 hover:bg-sky-50 hover:text-sky-700 hover:shadow-[0_4px_10px_rgba(15,23,42,0.08)] active:scale-[0.98]"
+                  ? "inline-flex items-center justify-center rounded-lg border border-sky-500 bg-sky-500 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-[transform,box-shadow,background-color,border-color,color,opacity] duration-200 ease-out hover:border-sky-400 hover:bg-sky-400 hover:shadow-[0_4px_10px_rgba(14,165,233,0.24)] active:scale-[0.98]"
+                  : "inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition-[transform,box-shadow,background-color,border-color,color,opacity] duration-200 ease-out hover:border-sky-400 hover:bg-sky-50 hover:text-sky-700 hover:shadow-[0_4px_10px_rgba(15,23,42,0.08)] active:scale-[0.98]"
               }
               onClick={() => applyMode(item.id)}
             >
@@ -268,7 +265,7 @@ export function LessonWorkspace({
             </div>
           ))}
         </div>
-        <div className="flex items-end gap-2">
+        <div className="relative">
           <input
             id="lesson-chat-photo"
             type="file"
@@ -282,24 +279,24 @@ export function LessonWorkspace({
               event.currentTarget.value = "";
             }}
           />
-          <label
-            htmlFor="lesson-chat-photo"
-            className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 shadow-sm transition-[transform,box-shadow,background-color,border-color,color,opacity] duration-200 ease-out hover:border-sky-400 hover:bg-sky-50 hover:text-sky-700 hover:shadow-[0_4px_10px_rgba(15,23,42,0.08)] active:scale-[0.98]"
-            title="Отправить фото"
-            aria-label="Отправить фото"
-          >
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M4 7h4l2-2h4l2 2h4v12H4z" />
-              <circle cx="12" cy="13" r="4" />
-            </svg>
-          </label>
           <textarea
             rows={4}
-            className="w-full"
+            className="w-full pr-12"
             placeholder="Задайте вопрос AI по теме урока"
             value={message}
             onChange={(event) => setMessage(event.target.value)}
           />
+          <label
+            htmlFor="lesson-chat-photo"
+            className="absolute right-2 bottom-2 flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-700 shadow-sm transition-[transform,box-shadow,background-color,border-color,color,opacity] duration-200 ease-out hover:border-sky-400 hover:bg-sky-50 hover:text-sky-700 hover:shadow-[0_4px_10px_rgba(15,23,42,0.08)] active:scale-[0.98]"
+            title="Отправить фото"
+            aria-label="Отправить фото"
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M4 7h4l2-2h4l2 2h4v12H4z" />
+              <circle cx="12" cy="13" r="4" />
+            </svg>
+          </label>
         </div>
         <button type="button" className="w-full" onClick={send} disabled={loading || processingAttachment}>
           {loading ? "Отправка..." : "Отправить"}

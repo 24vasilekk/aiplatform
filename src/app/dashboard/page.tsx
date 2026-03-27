@@ -39,15 +39,17 @@ export default async function DashboardPage() {
               <p className="text-sm text-slate-700">{course.description}</p>
             </div>
             <p className="mt-4 text-sm">Прогресс: {course.progress}%</p>
-            {course.hasAccess ? (
-              <Link href={`/courses/${course.id}`} className="btn-primary mt-auto inline-flex w-fit">
-                Открыть курс
-              </Link>
-            ) : (
-              <Link href="/pricing" className="btn-ghost mt-auto inline-flex w-fit">
-                Открыть доступ
-              </Link>
-            )}
+            <div className="mt-auto pt-6">
+              {course.hasAccess ? (
+                <Link href={`/courses/${course.id}`} className="btn-primary inline-flex w-fit">
+                  Открыть курс
+                </Link>
+              ) : (
+                <Link href="/pricing" className="btn-ghost inline-flex w-fit">
+                  Открыть доступ
+                </Link>
+              )}
+            </div>
           </article>
         ))}
       </div>
