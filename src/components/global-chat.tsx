@@ -45,10 +45,11 @@ export function GlobalChat() {
   async function send() {
     const trimmed = message.trim();
     if (loading) return;
-    if (!trimmed) {
+    if (!trimmed && !attachmentContext) {
       setSendStatus("Введите сообщение перед отправкой.");
       return;
     }
+    const finalMessage = trimmed || "Проверь фото и скажи, где ошибки и что исправить.";
 
     setLoading(true);
     setSendStatus(null);
@@ -58,7 +59,7 @@ export function GlobalChat() {
 
     setMessages((current) => [
       ...current,
-      { id: userDraftId, role: "user", content: trimmed, mode: nextMode, createdAt: new Date().toISOString() },
+      { id: userDraftId, role: "user", content: trimmed || "Отправил фото на проверку.", mode: nextMode, createdAt: new Date().toISOString() },
       { id: typingId, role: "assistant", content: "...", mode: nextMode, createdAt: new Date().toISOString() },
     ]);
     setMessage("");
@@ -68,7 +69,7 @@ export function GlobalChat() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          message: trimmed,
+          message: finalMessage,
           mode: nextMode,
           ...(attachmentContext ? { attachmentContext } : {}),
         }),
@@ -78,7 +79,7 @@ export function GlobalChat() {
         const data = (await response.json().catch(() => ({}))) as { error?: string };
         setSendStatus(data.error ?? `Ошибка отправки (HTTP ${response.status})`);
         setMessages((current) => current.filter((item) => item.id !== userDraftId && item.id !== typingId));
-        setMessage(trimmed);
+        setMessage(trimmed || finalMessage);
         return;
       }
 
@@ -89,7 +90,7 @@ export function GlobalChat() {
     } catch {
       setSendStatus("Сетевая ошибка: не удалось отправить сообщение.");
       setMessages((current) => current.filter((item) => item.id !== userDraftId && item.id !== typingId));
-      setMessage(trimmed);
+      setMessage(trimmed || finalMessage);
     } finally {
       setLoading(false);
     }
