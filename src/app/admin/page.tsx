@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { AdminCourseManager } from "@/components/admin-course-manager";
+import { AdminTutorManager } from "@/components/admin-tutor-manager";
 import {
   listCustomCourses,
   listCustomLessons,
@@ -39,6 +40,7 @@ export default async function AdminPage() {
         initialTasks={customTasks}
         initialUsers={users.map((item) => ({ id: item.id, email: item.email, role: item.role, createdAt: item.createdAt }))}
       />
+      <AdminTutorManager />
     </section>
   );
 }

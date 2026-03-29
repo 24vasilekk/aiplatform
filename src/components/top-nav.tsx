@@ -6,6 +6,7 @@ import { AuthControls } from "@/components/auth-controls";
 
 const links = [
   { href: "/dashboard", label: "Кабинет" },
+  { href: "/tutors", label: "Репетиторы" },
   { href: "/chat", label: "Общий AI-чат" },
   { href: "/pricing", label: "Оплата" },
   { href: "/admin", label: "Админка" },
