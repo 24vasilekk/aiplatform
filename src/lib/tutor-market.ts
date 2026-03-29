@@ -73,6 +73,51 @@ const DEMO_TUTORS: TutorListing[] = [
     ],
     createdAt: "2026-03-29T09:10:00.000Z",
   },
+  {
+    id: "tutor-demo-4",
+    name: "Максим Беляев",
+    subject: "physics",
+    pricePerHour: 1400,
+    rating: 4.6,
+    about: "Разбираем физику ЕГЭ от базы до сложных задач: акцент на понимание формул и практику.",
+    city: "Новосибирск",
+    experienceYears: 4,
+    reviews: [
+      { id: "r-7", author: "Тимур", rating: 5, text: "Стало проще понимать задачи на динамику и импульс." },
+      { id: "r-8", author: "София", rating: 4, text: "Хороший темп занятий, много полезных мини-тестов." },
+    ],
+    createdAt: "2026-03-29T09:15:00.000Z",
+  },
+  {
+    id: "tutor-demo-5",
+    name: "Полина Громова",
+    subject: "math",
+    pricePerHour: 1950,
+    rating: 4.8,
+    about: "Готовлю к профильной математике: план по темам, разбор типичных ошибок, контроль прогресса.",
+    city: "Екатеринбург",
+    experienceYears: 6,
+    reviews: [
+      { id: "r-9", author: "Вера", rating: 5, text: "Очень структурно, стало легче решать 17 и 18 задания." },
+      { id: "r-10", author: "Роман", rating: 4.5, text: "Понравилась система домашек и обратной связи." },
+    ],
+    createdAt: "2026-03-29T09:20:00.000Z",
+  },
+  {
+    id: "tutor-demo-6",
+    name: "Артем Мельников",
+    subject: "physics",
+    pricePerHour: 2100,
+    rating: 5,
+    about: "Подготовка на высокие баллы: подробные разборы второй части и стратегия на экзамене.",
+    city: "Нижний Новгород",
+    experienceYears: 9,
+    reviews: [
+      { id: "r-11", author: "Егор", rating: 5, text: "Занятия супер, теперь уверенно решаю вторую часть." },
+      { id: "r-12", author: "Лиза", rating: 5, text: "Четкие объяснения, всё по делу и без воды." },
+    ],
+    createdAt: "2026-03-29T09:25:00.000Z",
+  },
 ];
 
 async function ensureStorePath() {
@@ -89,6 +134,15 @@ async function loadStore(): Promise<TutorStore> {
     const data = JSON.parse(raw) as TutorStore;
     if (!Array.isArray(data.tutors)) {
       throw new Error("invalid store");
+    }
+    const existingIds = new Set(data.tutors.map((item) => item.id));
+    const missingDemoTutors = DEMO_TUTORS.filter((item) => !existingIds.has(item.id));
+    if (missingDemoTutors.length > 0) {
+      const patched: TutorStore = {
+        tutors: [...data.tutors, ...missingDemoTutors],
+      };
+      await saveStore(patched);
+      return patched;
     }
     return data;
   } catch {
