@@ -1,4 +1,5 @@
 import path from "node:path";
+import os from "node:os";
 import { promises as fs } from "node:fs";
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/api-auth";
@@ -58,8 +59,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Тип файла пока не поддерживается" }, { status: 400 });
   }
 
-  const storageDir = path.join(process.cwd(), "data", "uploads");
-  await fs.mkdir(storageDir, { recursive: true });
+  const storageDir = path.join(os.tmpdir(), "ege-mvp", "uploads");
 
   const safeName = normalizeFilename(file.name || "upload");
   const extension = path.extname(safeName);
@@ -67,16 +67,24 @@ export async function POST(request: NextRequest) {
   const finalName = `${baseName}-${crypto.randomUUID()}${extension}`;
   const storagePath = path.join(storageDir, finalName);
 
-  const bytes = Buffer.from(await file.arrayBuffer());
-  await fs.writeFile(storagePath, bytes);
+  try {
+    await fs.mkdir(storageDir, { recursive: true });
+    const bytes = Buffer.from(await file.arrayBuffer());
+    await fs.writeFile(storagePath, bytes);
 
-  const upload = await createUserUpload({
-    userId: auth.user.id,
-    originalName: file.name || safeName,
-    mimeType,
-    sizeBytes: file.size,
-    storagePath,
-  });
+    const upload = await createUserUpload({
+      userId: auth.user.id,
+      originalName: file.name || safeName,
+      mimeType,
+      sizeBytes: file.size,
+      storagePath,
+    });
 
-  return NextResponse.json({ ok: true, upload }, { status: 201 });
+    return NextResponse.json({ ok: true, upload }, { status: 201 });
+  } catch {
+    return NextResponse.json(
+      { error: "Не удалось сохранить файл. Проверьте, что подключена БД и повторите." },
+      { status: 500 },
+    );
+  }
 }
