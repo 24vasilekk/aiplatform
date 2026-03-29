@@ -69,7 +69,10 @@ async function extractTextFromImageByAi(input: {
   mimeType: string;
   bytes: Uint8Array;
 }) {
-  const key = process.env.OPENROUTER_API_KEY;
+  const key =
+    process.env.OPENROUTER_API_KEY ||
+    process.env.OPENROUTERAPIKEY ||
+    process.env.openrouterapikey;
   const model = process.env.OPENROUTER_VISION_MODEL ?? process.env.OPENROUTER_MODEL ?? "openai/gpt-4o-mini";
 
   if (!key) {
@@ -79,31 +82,36 @@ async function extractTextFromImageByAi(input: {
   const imageBase64 = Buffer.from(input.bytes).toString("base64");
   const imageDataUrl = `data:${input.mimeType};base64,${imageBase64}`;
 
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${key}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        {
-          role: "system",
-          content:
-            "Извлеки текст с изображения максимально точно. Если текста нет, ответь: Текст не обнаружен.",
-        },
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "Считай текст с изображения и верни только распознанный текст." },
-            { type: "image_url", image_url: { url: imageDataUrl } },
-          ],
-        },
-      ],
-      temperature: 0,
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: "system",
+            content:
+              "Извлеки текст с изображения максимально точно. Если текста нет, ответь: Текст не обнаружен.",
+          },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Считай текст с изображения и верни только распознанный текст." },
+              { type: "image_url", image_url: { url: imageDataUrl } },
+            ],
+          },
+        ],
+        temperature: 0,
+      }),
+    });
+  } catch {
+    return "OCR временно недоступен: ошибка сети при обращении к AI.";
+  }
 
   if (!response.ok) {
     return `OCR временно недоступен (status ${response.status}).`;
@@ -200,7 +208,10 @@ async function tryExtractPdfTextLayerJs(pdfBytes: Buffer) {
 }
 
 async function tryExtractPdfByAiOcr(storagePath: string) {
-  const key = process.env.OPENROUTER_API_KEY;
+  const key =
+    process.env.OPENROUTER_API_KEY ||
+    process.env.OPENROUTERAPIKEY ||
+    process.env.openrouterapikey;
   if (!key) {
     return null;
   }
