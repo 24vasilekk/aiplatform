@@ -1,4 +1,5 @@
 import { promises as fs } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 export type TutorSubject = "math" | "physics";
@@ -121,7 +122,8 @@ const DEMO_TUTORS: TutorListing[] = [
 ];
 
 async function ensureStorePath() {
-  const dir = path.join(process.cwd(), ".tmp");
+  // Vercel serverless allows writing to OS tmp dir, but project root is read-only.
+  const dir = path.join(os.tmpdir(), "ege-mvp");
   await fs.mkdir(dir, { recursive: true });
   return path.join(dir, "tutors-market.json");
 }
@@ -147,14 +149,23 @@ async function loadStore(): Promise<TutorStore> {
     return data;
   } catch {
     const initial: TutorStore = { tutors: DEMO_TUTORS };
-    await fs.writeFile(storePath, JSON.stringify(initial, null, 2), "utf8");
+    try {
+      await fs.writeFile(storePath, JSON.stringify(initial, null, 2), "utf8");
+    } catch {
+      // On read-only environments, keep demo data in-memory fallback.
+      return initial;
+    }
     return initial;
   }
 }
 
 async function saveStore(data: TutorStore) {
   const storePath = await ensureStorePath();
-  await fs.writeFile(storePath, JSON.stringify(data, null, 2), "utf8");
+  try {
+    await fs.writeFile(storePath, JSON.stringify(data, null, 2), "utf8");
+  } catch {
+    // No-op fallback for environments without persistent writable fs.
+  }
 }
 
 export async function listTutorListings() {
