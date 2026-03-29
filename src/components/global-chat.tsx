@@ -105,24 +105,10 @@ export function GlobalChat() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const uploadResponse = await fetch("/api/uploads", { method: "POST", body: formData });
-      const uploadData = (await uploadResponse.json().catch(() => ({}))) as {
-        upload?: { id: string };
-        error?: string;
-      };
-
-      if (!uploadResponse.ok || !uploadData.upload) {
-        setAttachmentStatus(uploadData.error ?? "Не удалось загрузить фото.");
-        return;
-      }
-
-      const analyzeResponse = await fetch("/api/ai/attachments/analyze", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ uploadId: uploadData.upload.id }),
-      });
+      const analyzeResponse = await fetch("/api/ai/attachments/analyze-file", { method: "POST", body: formData });
       const analyzeData = (await analyzeResponse.json().catch(() => ({}))) as {
         context?: string;
+        summary?: string;
         error?: string;
       };
 
@@ -132,7 +118,7 @@ export function GlobalChat() {
       }
 
       setAttachmentContext(analyzeData.context);
-      setAttachmentStatus("Фото добавлено в контекст следующего сообщения.");
+      setAttachmentStatus(analyzeData.summary ? `Фото добавлено. Кратко: ${analyzeData.summary}` : "Фото добавлено в контекст следующего сообщения.");
     } catch {
       setAttachmentStatus("Сетевая ошибка при обработке фото.");
     } finally {
