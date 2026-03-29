@@ -3,7 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { PDFParse } from "pdf-parse";
 
 const TEXT_MIME_PREFIXES = ["text/"];
 const TEXT_MIME_EXACT = new Set([
@@ -187,7 +186,22 @@ async function tryExtractPdfTextLayer(storagePath: string) {
 }
 
 async function tryExtractPdfTextLayerJs(pdfBytes: Buffer) {
-  const parser = new PDFParse({ data: pdfBytes });
+  let PDFParseCtor: new (input: { data: Buffer }) => {
+    getText: () => Promise<{ text: string; total: number }>;
+    destroy: () => Promise<void>;
+  };
+
+  try {
+    const mod = await import("pdf-parse");
+    if (!mod.PDFParse) {
+      return null;
+    }
+    PDFParseCtor = mod.PDFParse as typeof PDFParseCtor;
+  } catch {
+    return null;
+  }
+
+  const parser = new PDFParseCtor({ data: pdfBytes });
 
   try {
     const parsed = await parser.getText();
