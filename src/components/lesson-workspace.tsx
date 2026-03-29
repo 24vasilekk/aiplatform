@@ -167,14 +167,18 @@ export function LessonWorkspace({
       };
 
       if (!analyzeResponse.ok || !analyzeData.context) {
-        setAttachmentStatus(analyzeData.error ?? "Не удалось распознать фото.");
+        const reason =
+          analyzeData.error ??
+          (analyzeResponse.status === 401 ? "Требуется вход в аккаунт." : "Не удалось распознать фото.");
+        setAttachmentStatus(`Ошибка обработки фото (HTTP ${analyzeResponse.status}): ${reason}`);
         return;
       }
 
       setAttachmentContext(analyzeData.context);
       setAttachmentStatus(analyzeData.summary ? `Фото добавлено. Кратко: ${analyzeData.summary}` : "Фото добавлено в контекст следующего сообщения.");
-    } catch {
-      setAttachmentStatus("Сетевая ошибка при обработке фото.");
+    } catch (error) {
+      const details = error instanceof Error ? ` ${error.message}` : "";
+      setAttachmentStatus(`Сетевая ошибка при обработке фото.${details}`);
     } finally {
       setProcessingAttachment(false);
     }
