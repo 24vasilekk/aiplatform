@@ -3,7 +3,7 @@ import { promises as fs } from "node:fs";
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/api-auth";
 import { extractUploadContent } from "@/lib/attachment-ai";
-import { getLessonKnowledge, upsertLessonKnowledge } from "@/lib/db";
+import { createAdminAuditLog, getLessonKnowledge, upsertLessonKnowledge } from "@/lib/db";
 
 const MAX_BYTES = 12 * 1024 * 1024;
 
@@ -91,6 +91,19 @@ export async function POST(
     summary: extracted.summary,
     pageCount: extracted.pageCount,
     textChars: extracted.textChars,
+  });
+  await createAdminAuditLog({
+    adminUserId: auth.user.id,
+    action: "upsert_lesson_knowledge",
+    entityType: "lesson_knowledge",
+    entityId: knowledge.id,
+    metadata: {
+      lessonId,
+      mimeType,
+      originalName: file.name || safeName,
+      textChars: knowledge.textChars,
+      pageCount: knowledge.pageCount,
+    },
   });
 
   return NextResponse.json({ ok: true, knowledge }, { status: 201 });

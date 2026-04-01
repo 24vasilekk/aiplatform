@@ -156,6 +156,37 @@ function buildSummaryFromText(text: string, maxLength = 360) {
   return summary;
 }
 
+function decodeBasicXmlEntities(text: string) {
+  return text
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, "\"")
+    .replace(/&apos;/g, "'");
+}
+
+function xmlToPlainText(xml: string) {
+  const withLineBreaks = xml
+    .replace(/<\/w:p>/g, "\n")
+    .replace(/<w:tab[^>]*\/>/g, "\t")
+    .replace(/<w:br[^>]*\/>/g, "\n");
+
+  const noTags = withLineBreaks.replace(/<[^>]+>/g, " ");
+  return normalizeExtractedText(decodeBasicXmlEntities(noTags).replace(/[ \t]+\n/g, "\n"));
+}
+
+async function tryExtractDocxText(storagePath: string) {
+  try {
+    const { stdout } = await execFileAsync("unzip", ["-p", storagePath, "word/document.xml"], {
+      maxBuffer: 24 * 1024 * 1024,
+    });
+    const text = xmlToPlainText(stdout);
+    return text.length > 0 ? text : null;
+  } catch {
+    return null;
+  }
+}
+
 async function tryGetPdfPageCount(storagePath: string) {
   try {
     const { stdout } = await execFileAsync("pdfinfo", [storagePath], {
@@ -367,6 +398,27 @@ export async function extractUploadContent(input: {
       extractedText,
       summary: buildSummaryFromText(extractedText),
       pageCount: pageCountByMeta,
+      textChars: extractedText.length,
+    };
+  }
+
+  if (lowerName.endsWith(".docx")) {
+    const text = await tryExtractDocxText(input.storagePath);
+    if (text) {
+      return {
+        extractedText: text,
+        summary: buildSummaryFromText(text),
+        pageCount: null,
+        textChars: text.length,
+      };
+    }
+
+    const extractedText =
+      "Не удалось извлечь текст из DOCX. Проверьте, что файл не поврежден и утилита unzip доступна в окружении.";
+    return {
+      extractedText,
+      summary: buildSummaryFromText(extractedText),
+      pageCount: null,
       textChars: extractedText.length,
     };
   }

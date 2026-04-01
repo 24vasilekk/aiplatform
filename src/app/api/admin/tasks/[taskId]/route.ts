@@ -1,16 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/api-auth";
-import { deleteCustomTask, updateCustomTask } from "@/lib/db";
+import { createAdminAuditLog, deleteCustomTask, updateCustomTask } from "@/lib/db";
 
 const schema = z
   .object({
     lessonId: z.string().trim().min(1).optional(),
     type: z.enum(["numeric", "choice"]).optional(),
+    status: z.enum(["published", "unpublished", "archived"]).optional(),
     question: z.string().trim().min(5).optional(),
     options: z.array(z.string().trim().min(1)).optional().nullable(),
     answer: z.string().trim().min(1).optional(),
     solution: z.string().trim().min(5).optional(),
+    difficulty: z.number().int().min(1).max(5).optional(),
+    topicTags: z.array(z.string().trim().min(1).max(40)).max(12).optional(),
+    exemplarSolution: z.string().trim().min(5).max(10000).optional().nullable(),
+    evaluationCriteria: z.array(z.string().trim().min(3).max(400)).max(20).optional(),
   })
   .superRefine((value, ctx) => {
     if (value.type === "choice" && value.options && value.options.length < 2) {
@@ -25,14 +30,14 @@ const schema = z
 async function authorize(request: NextRequest) {
   const auth = await requireUser(request);
   if (auth.error || !auth.user) {
-    return { error: auth.error };
+    return { error: auth.error, user: null };
   }
 
   if (auth.user.role !== "admin") {
-    return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
+    return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }), user: null };
   }
 
-  return { error: null };
+  return { error: null, user: auth.user };
 }
 
 export async function PATCH(
@@ -40,7 +45,7 @@ export async function PATCH(
   { params }: { params: Promise<{ taskId: string }> },
 ) {
   const auth = await authorize(request);
-  if (auth.error) return auth.error;
+  if (auth.error || !auth.user) return auth.error;
 
   const { taskId } = await params;
   const parsed = schema.safeParse(await request.json().catch(() => null));
@@ -62,6 +67,13 @@ export async function PATCH(
   if (!task) {
     return NextResponse.json({ error: "Задание не найдено" }, { status: 404 });
   }
+  await createAdminAuditLog({
+    adminUserId: auth.user.id,
+    action: "update_task",
+    entityType: "task",
+    entityId: task.id,
+    metadata: nextData,
+  });
 
   return NextResponse.json({ ok: true, task });
 }
@@ -71,7 +83,7 @@ export async function DELETE(
   { params }: { params: Promise<{ taskId: string }> },
 ) {
   const auth = await authorize(request);
-  if (auth.error) return auth.error;
+  if (auth.error || !auth.user) return auth.error;
 
   const { taskId } = await params;
   const ok = await deleteCustomTask(taskId);
@@ -79,6 +91,12 @@ export async function DELETE(
   if (!ok) {
     return NextResponse.json({ error: "Задание не найдено" }, { status: 404 });
   }
+  await createAdminAuditLog({
+    adminUserId: auth.user.id,
+    action: "delete_task",
+    entityType: "task",
+    entityId: taskId,
+  });
 
   return NextResponse.json({ ok: true });
 }

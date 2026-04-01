@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/api-auth";
-import { saveLessonProgress } from "@/lib/db";
+import { createAnalyticsEvent, saveLessonProgress } from "@/lib/db";
 
 const schema = z.object({
   status: z.enum(["not_started", "in_progress", "completed"]).default("in_progress"),
@@ -12,6 +12,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ lessonId: string }> },
 ) {
+  const requestPath = new URL(request.url).pathname;
   const auth = await requireUser(request);
   if (auth.error || !auth.user) {
     return auth.error;
@@ -30,6 +31,17 @@ export async function POST(
     lessonId,
     status: parsed.data.status,
     lastPositionSec: parsed.data.lastPositionSec,
+  });
+
+  await createAnalyticsEvent({
+    eventName: "lesson_progress_updated",
+    userId: auth.user.id,
+    path: requestPath,
+    payload: {
+      lessonId,
+      status: parsed.data.status,
+      lastPositionSec: parsed.data.lastPositionSec,
+    },
   });
 
   return NextResponse.json({ ok: true, lessonId });

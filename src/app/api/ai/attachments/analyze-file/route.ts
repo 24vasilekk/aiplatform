@@ -4,6 +4,7 @@ import { promises as fs } from "node:fs";
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/api-auth";
 import { buildAttachmentContext, extractTimecodes, extractUploadContent } from "@/lib/attachment-ai";
+import { applyRateLimitHeaders, createRateLimitResponse, rateLimitByRequest } from "@/lib/security";
 
 const MAX_BYTES = 8 * 1024 * 1024;
 
@@ -28,25 +29,50 @@ export async function POST(request: NextRequest) {
   if (auth.error || !auth.user) {
     return auth.error;
   }
+  const rateLimit = rateLimitByRequest({
+    request,
+    namespace: "ai-attachments-analyze-file",
+    keySuffix: auth.user.id,
+    limit: 20,
+    windowMs: 10 * 60 * 1_000,
+  });
+  if (!rateLimit.ok) {
+    return createRateLimitResponse(rateLimit, "Слишком много загрузок. Попробуйте позже.");
+  }
+
+  const contentType = request.headers.get("content-type")?.toLowerCase() ?? "";
+  if (!contentType.includes("multipart/form-data")) {
+    const response = NextResponse.json({ error: "Ожидается multipart/form-data" }, { status: 415 });
+    applyRateLimitHeaders(response, rateLimit);
+    return response;
+  }
 
   const formData = await request.formData();
   const file = formData.get("file");
 
   if (!(file instanceof File)) {
-    return NextResponse.json({ error: "Файл не передан" }, { status: 400 });
+    const response = NextResponse.json({ error: "Файл не передан" }, { status: 400 });
+    applyRateLimitHeaders(response, rateLimit);
+    return response;
   }
 
   if (file.size <= 0) {
-    return NextResponse.json({ error: "Пустой файл" }, { status: 400 });
+    const response = NextResponse.json({ error: "Пустой файл" }, { status: 400 });
+    applyRateLimitHeaders(response, rateLimit);
+    return response;
   }
 
   if (file.size > MAX_BYTES) {
-    return NextResponse.json({ error: "Файл слишком большой (до 8 MB)" }, { status: 400 });
+    const response = NextResponse.json({ error: "Файл слишком большой (до 8 MB)" }, { status: 400 });
+    applyRateLimitHeaders(response, rateLimit);
+    return response;
   }
 
   const mimeType = file.type || "application/octet-stream";
   if (!ALLOWED_TYPES.has(mimeType) && !mimeType.startsWith("text/")) {
-    return NextResponse.json({ error: "Тип файла пока не поддерживается" }, { status: 400 });
+    const response = NextResponse.json({ error: "Тип файла пока не поддерживается" }, { status: 400 });
+    applyRateLimitHeaders(response, rateLimit);
+    return response;
   }
 
   const storageDir = path.join(os.tmpdir(), "ege-mvp", "attachments");
@@ -76,15 +102,19 @@ export async function POST(request: NextRequest) {
       timecodes,
     });
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       ok: true,
       context,
       summary: extracted.summary,
       pageCount: extracted.pageCount,
       textChars: extracted.textChars,
     });
+    applyRateLimitHeaders(response, rateLimit);
+    return response;
   } catch {
-    return NextResponse.json({ error: "Не удалось обработать файл." }, { status: 500 });
+    const response = NextResponse.json({ error: "Не удалось обработать файл." }, { status: 500 });
+    applyRateLimitHeaders(response, rateLimit);
+    return response;
   } finally {
     await fs.rm(storagePath, { force: true }).catch(() => undefined);
   }

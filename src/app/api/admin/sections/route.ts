@@ -1,12 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/api-auth";
-import { createCustomSection, listCustomSections } from "@/lib/db";
+import { createAdminAuditLog, createCustomSection, listCustomSectionsPaged } from "@/lib/db";
 
 const schema = z.object({
   courseId: z.string().trim().min(1),
   title: z.string().trim().min(2),
 });
+
+function parseTake(value: string | null) {
+  if (!value) return 300;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return 300;
+  return Math.max(1, Math.min(parsed, 700));
+}
+
+function parseSkip(value: string | null) {
+  if (!value) return 0;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.max(0, parsed);
+}
 
 async function authorize(request: NextRequest) {
   const auth = await requireUser(request);
@@ -27,8 +41,16 @@ export async function GET(request: NextRequest) {
     return auth.error;
   }
 
-  const sections = await listCustomSections();
-  return NextResponse.json(sections);
+  const take = parseTake(request.nextUrl.searchParams.get("take"));
+  const skip = parseSkip(request.nextUrl.searchParams.get("skip"));
+  const courseId = request.nextUrl.searchParams.get("courseId")?.trim() || undefined;
+  const sections = await listCustomSectionsPaged({ courseId, take, skip });
+  return NextResponse.json({
+    items: sections.rows,
+    total: sections.total,
+    take: sections.take,
+    skip: sections.skip,
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -43,5 +65,15 @@ export async function POST(request: NextRequest) {
   }
 
   const section = await createCustomSection(parsed.data);
+  await createAdminAuditLog({
+    adminUserId: auth.user.id,
+    action: "create_section",
+    entityType: "section",
+    entityId: section.id,
+    metadata: {
+      courseId: section.courseId,
+      title: section.title,
+    },
+  });
   return NextResponse.json({ ok: true, section }, { status: 201 });
 }

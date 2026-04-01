@@ -75,6 +75,40 @@ export function PricingPlans({ userEmail }: { userEmail: string }) {
       }
 
       setStatus(data.message ?? "Оплата выполнена");
+      const checkoutUrl =
+        (data as { payment?: { checkoutUrl?: string | null } }).payment?.checkoutUrl?.trim() ?? "";
+      if (checkoutUrl) {
+        window.location.href = checkoutUrl;
+        return;
+      }
+      router.refresh();
+      setTimeout(() => setActivePlan(null), 700);
+    } catch {
+      setStatus("Сетевая ошибка. Попробуйте еще раз.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function payWithWallet() {
+    if (!activePlan) return;
+    setLoading(true);
+    setStatus(null);
+
+    try {
+      const response = await fetch("/api/billing/pay-with-wallet", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ planId: activePlan.id }),
+      });
+
+      const data = (await response.json().catch(() => ({}))) as { message?: string; error?: string };
+      if (!response.ok) {
+        setStatus(data.error ?? "Не удалось оплатить с баланса.");
+        return;
+      }
+
+      setStatus(data.message ?? "Покупка с баланса выполнена.");
       router.refresh();
       setTimeout(() => setActivePlan(null), 700);
     } catch {
@@ -147,6 +181,9 @@ export function PricingPlans({ userEmail }: { userEmail: string }) {
               </p>
               <button type="button" className="btn-primary w-full" onClick={pay} disabled={loading}>
                 {loading ? "Обработка..." : "Подтвердить оплату"}
+              </button>
+              <button type="button" className="btn-ghost w-full" onClick={payWithWallet} disabled={loading}>
+                {loading ? "Обработка..." : "Оплатить с баланса"}
               </button>
               {status ? <p className="text-sm text-slate-700">{status}</p> : null}
             </div>

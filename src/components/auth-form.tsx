@@ -1,9 +1,12 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { TelegramLoginWidget } from "@/components/telegram-login-widget";
 
 type Mode = "login" | "register";
+type AuthErrorResponse = { error?: string; code?: string };
 
 export function AuthForm({ mode }: { mode: Mode }) {
   const [email, setEmail] = useState("");
@@ -26,14 +29,22 @@ export function AuthForm({ mode }: { mode: Mode }) {
         body: JSON.stringify({ email, password }),
       });
 
-      let data: { error?: string } = {};
+      let data: AuthErrorResponse = {};
       try {
-        data = (await response.json()) as { error?: string };
+        data = (await response.json()) as AuthErrorResponse;
       } catch {
         data = {};
       }
 
       if (!response.ok) {
+        if (data.code === "account_exists") {
+          setError(
+            mode === "register"
+              ? "Аккаунт уже существует. Войдите через email/пароль, Google или Telegram."
+              : "Аккаунт уже существует. Попробуйте другой способ входа.",
+          );
+          return;
+        }
         setError(data.error ?? "Ошибка авторизации");
         return;
       }
@@ -49,26 +60,43 @@ export function AuthForm({ mode }: { mode: Mode }) {
 
   return (
     <form className="form-stack" onSubmit={onSubmit}>
-      <input
-        type="email"
-        placeholder="Email"
-        className="w-full"
-        value={email}
-        onChange={(event) => setEmail(event.target.value)}
-        required
-      />
-      <input
-        type="password"
-        placeholder="Пароль"
-        className="w-full"
-        value={password}
-        onChange={(event) => setPassword(event.target.value)}
-        required
-      />
-      {error ? <p className="text-sm text-rose-600">{error}</p> : null}
+      <div className="grid gap-3">
+        <label className="space-y-1">
+          <span className="text-xs font-medium uppercase tracking-[0.08em] text-slate-500">Email</span>
+          <input
+            type="email"
+            placeholder="you@example.com"
+            className="w-full"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            required
+          />
+        </label>
+        <label className="space-y-1">
+          <span className="text-xs font-medium uppercase tracking-[0.08em] text-slate-500">Пароль</span>
+          <input
+            type="password"
+            placeholder={mode === "register" ? "Минимум 8 символов" : "Введите пароль"}
+            className="w-full"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+          />
+        </label>
+      </div>
+      {error ? <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
       <button type="submit" className="w-full" disabled={loading}>
         {loading ? "Подождите..." : mode === "login" ? "Войти" : "Создать аккаунт"}
       </button>
+      {mode === "login" ? (
+        <div className="space-y-3 border-t border-slate-200 pt-3">
+          <p className="text-center text-xs font-medium uppercase tracking-[0.08em] text-slate-500">или войдите через соцсеть</p>
+          <Link href="/api/auth/google/login" className="btn-ghost w-full text-center">
+            Продолжить через Google
+          </Link>
+          <TelegramLoginWidget />
+        </div>
+      ) : null}
     </form>
   );
 }

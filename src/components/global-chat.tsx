@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { ChatMessageContent } from "@/components/chat-message-content";
+import { AiModeSwitcher } from "@/components/ai-mode-switcher";
+import { getAiModeDraftPrefix, type AiMode } from "@/lib/ai-mode";
 
 type Message = {
   id: string;
@@ -14,20 +16,19 @@ type Message = {
 export function GlobalChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [message, setMessage] = useState("");
-  const [mode, setMode] = useState<"default" | "beginner" | "similar_task">("default");
+  const [mode, setMode] = useState<AiMode>("default");
   const [loading, setLoading] = useState(false);
   const [sendStatus, setSendStatus] = useState<string | null>(null);
   const [attachmentContext, setAttachmentContext] = useState<string | null>(null);
   const [attachmentStatus, setAttachmentStatus] = useState<string | null>(null);
   const [processingAttachment, setProcessingAttachment] = useState(false);
 
-  function applyMode(nextMode: "default" | "beginner" | "similar_task") {
+  function applyMode(nextMode: AiMode) {
     setMode(nextMode);
     setSendStatus(null);
     setMessage((current) => {
       if (current.trim().length > 0) return current;
-      if (nextMode === "beginner") return "Объясни как для новичка: ";
-      return "";
+      return getAiModeDraftPrefix(nextMode);
     });
   }
 
@@ -133,15 +134,7 @@ export function GlobalChat() {
   return (
     <section className="mx-auto max-w-3xl space-y-4">
       <h1>Общий AI-чат по ЕГЭ</h1>
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          className={mode === "beginner" ? "btn-primary px-3 py-1.5 text-xs" : "btn-ghost px-3 py-1.5 text-xs"}
-          onClick={() => applyMode("beginner")}
-        >
-          Объясни как для новичка
-        </button>
-      </div>
+      <AiModeSwitcher mode={mode} onChange={applyMode} />
       <div className="max-h-[320px] space-y-2 overflow-y-auto rounded-xl border border-sky-200 bg-white p-3 sm:max-h-[420px] sm:p-4">
         {messages.length === 0 ? <p className="text-sm text-slate-600">Напишите первый вопрос.</p> : null}
         {messages.map((item) => (

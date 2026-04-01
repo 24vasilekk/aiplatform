@@ -3,9 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { createPasswordResetToken, findUserByEmail, invalidateUserPasswordResetTokens } from "@/lib/db";
 import { isSmtpConfigured, sendPasswordResetEmail } from "@/lib/mailer";
+import { applyRateLimitHeaders, createRateLimitResponse, hasJsonContentType, rateLimitByRequest } from "@/lib/security";
 
 const schema = z.object({
-  email: z.email(),
+  email: z.email().trim().max(254),
 });
 
 function hashToken(token: string) {
@@ -13,9 +14,27 @@ function hashToken(token: string) {
 }
 
 export async function POST(request: NextRequest) {
+  const rateLimit = rateLimitByRequest({
+    request,
+    namespace: "auth-forgot-password",
+    limit: 6,
+    windowMs: 15 * 60 * 1_000,
+  });
+  if (!rateLimit.ok) {
+    return createRateLimitResponse(rateLimit, "Слишком много запросов на восстановление. Попробуйте позже.");
+  }
+
+  if (!hasJsonContentType(request)) {
+    const response = NextResponse.json({ error: "Ожидается JSON-запрос" }, { status: 415 });
+    applyRateLimitHeaders(response, rateLimit);
+    return response;
+  }
+
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: "Некорректный email" }, { status: 400 });
+    const response = NextResponse.json({ error: "Некорректный email" }, { status: 400 });
+    applyRateLimitHeaders(response, rateLimit);
+    return response;
   }
 
   const email = parsed.data.email.toLowerCase().trim();
@@ -23,10 +42,12 @@ export async function POST(request: NextRequest) {
 
   // Do not leak whether the email exists.
   if (!user) {
-    return NextResponse.json({
+    const response = NextResponse.json({
       ok: true,
       message: "Если аккаунт существует, отправили ссылку на восстановление.",
     });
+    applyRateLimitHeaders(response, rateLimit);
+    return response;
   }
 
   const rawToken = randomBytes(32).toString("hex");
@@ -58,7 +79,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  return NextResponse.json({
+  const response = NextResponse.json({
     ok: true,
     message: smtpConfigured && emailSent
       ? "Если аккаунт существует, отправили письмо со ссылкой на восстановление."
@@ -67,4 +88,6 @@ export async function POST(request: NextRequest) {
     resetUrl: smtpConfigured && emailSent ? undefined : resetUrl,
     expiresAt: expiresAt.toISOString(),
   });
+  applyRateLimitHeaders(response, rateLimit);
+  return response;
 }

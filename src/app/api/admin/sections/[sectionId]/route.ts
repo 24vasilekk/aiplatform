@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/api-auth";
-import { deleteCustomSection, updateCustomSection } from "@/lib/db";
+import { createAdminAuditLog, deleteCustomSection, updateCustomSection } from "@/lib/db";
 
 const schema = z.object({
   title: z.string().trim().min(2),
@@ -10,14 +10,14 @@ const schema = z.object({
 async function authorize(request: NextRequest) {
   const auth = await requireUser(request);
   if (auth.error || !auth.user) {
-    return { error: auth.error };
+    return { error: auth.error, user: null };
   }
 
   if (auth.user.role !== "admin") {
-    return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
+    return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }), user: null };
   }
 
-  return { error: null };
+  return { error: null, user: auth.user };
 }
 
 export async function PATCH(
@@ -25,7 +25,7 @@ export async function PATCH(
   { params }: { params: Promise<{ sectionId: string }> },
 ) {
   const auth = await authorize(request);
-  if (auth.error) return auth.error;
+  if (auth.error || !auth.user) return auth.error;
 
   const { sectionId } = await params;
   const parsed = schema.safeParse(await request.json().catch(() => null));
@@ -37,6 +37,13 @@ export async function PATCH(
   if (!section) {
     return NextResponse.json({ error: "Раздел не найден" }, { status: 404 });
   }
+  await createAdminAuditLog({
+    adminUserId: auth.user.id,
+    action: "update_section",
+    entityType: "section",
+    entityId: section.id,
+    metadata: parsed.data,
+  });
 
   return NextResponse.json({ ok: true, section });
 }
@@ -46,7 +53,7 @@ export async function DELETE(
   { params }: { params: Promise<{ sectionId: string }> },
 ) {
   const auth = await authorize(request);
-  if (auth.error) return auth.error;
+  if (auth.error || !auth.user) return auth.error;
 
   const { sectionId } = await params;
   const ok = await deleteCustomSection(sectionId);
@@ -54,6 +61,12 @@ export async function DELETE(
   if (!ok) {
     return NextResponse.json({ error: "Раздел не найден" }, { status: 404 });
   }
+  await createAdminAuditLog({
+    adminUserId: auth.user.id,
+    action: "delete_section",
+    entityType: "section",
+    entityId: sectionId,
+  });
 
   return NextResponse.json({ ok: true });
 }

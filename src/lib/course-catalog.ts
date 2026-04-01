@@ -7,7 +7,14 @@ import {
   type Lesson,
   type Task,
 } from "@/lib/mvp-data";
-import { listCustomCourses, listCustomLessons, listCustomSections, listCustomTasks } from "@/lib/db";
+import {
+  findCustomLessonById,
+  findCustomSectionById,
+  listCustomCourses,
+  listCustomLessonsPaged,
+  listCustomSectionsPaged,
+  listCustomTasksByLessonIds,
+} from "@/lib/db";
 
 export type CatalogCourse = Course & {
   source: "static" | "custom";
@@ -21,10 +28,40 @@ export type CatalogLesson = Lesson & {
   source: "static" | "custom";
 };
 
+const CATALOG_CACHE_TTL_MS = 30_000;
+
+type CacheEntry<T> = {
+  value: T;
+  expiresAt: number;
+};
+
+const catalogCache = new Map<string, CacheEntry<unknown>>();
+
+function getCached<T>(key: string): T | null {
+  const item = catalogCache.get(key);
+  if (!item) return null;
+  if (item.expiresAt <= Date.now()) {
+    catalogCache.delete(key);
+    return null;
+  }
+  return item.value as T;
+}
+
+function setCached<T>(key: string, value: T, ttlMs = CATALOG_CACHE_TTL_MS) {
+  catalogCache.set(key, {
+    value,
+    expiresAt: Date.now() + ttlMs,
+  });
+}
+
 export async function listAllCourses(): Promise<CatalogCourse[]> {
+  const cacheKey = "courses";
+  const cached = getCached<CatalogCourse[]>(cacheKey);
+  if (cached) return cached;
+
   const customCourses = await listCustomCourses();
 
-  return [
+  const result = [
     ...staticCourses.map((course) => ({ ...course, source: "static" as const })),
     ...customCourses.map((course) => ({
       id: course.id,
@@ -36,6 +73,8 @@ export async function listAllCourses(): Promise<CatalogCourse[]> {
       source: "custom" as const,
     })),
   ];
+  setCached(cacheKey, result);
+  return result;
 }
 
 export async function getCatalogCourseById(courseId: string) {
@@ -44,9 +83,18 @@ export async function getCatalogCourseById(courseId: string) {
 }
 
 export async function listSectionsByCourseId(courseId: string): Promise<CatalogSection[]> {
-  const customSections = await listCustomSections();
+  const cacheKey = `sections:${courseId}`;
+  const cached = getCached<CatalogSection[]>(cacheKey);
+  if (cached) return cached;
 
-  return [
+  const customSectionsPage = await listCustomSectionsPaged({
+    courseId,
+    take: 1_000,
+    skip: 0,
+  });
+  const customSections = customSectionsPage.rows;
+
+  const result = [
     ...staticSections
       .filter((section) => section.courseId === courseId)
       .map((section) => ({ ...section, source: "static" as const })),
@@ -60,13 +108,34 @@ export async function listSectionsByCourseId(courseId: string): Promise<CatalogS
         source: "custom" as const,
       })),
   ];
+  setCached(cacheKey, result);
+  return result;
 }
 
 export async function listLessonsBySectionId(sectionId: string): Promise<CatalogLesson[]> {
-  const customLessons = await listCustomLessons();
-  const customTasks = await listCustomTasks();
+  const cacheKey = `lessons:${sectionId}`;
+  const cached = getCached<CatalogLesson[]>(cacheKey);
+  if (cached) return cached;
 
-  return [
+  const customLessonsPage = await listCustomLessonsPaged({
+    sectionId,
+    take: 1_000,
+    skip: 0,
+  });
+  const customLessons = customLessonsPage.rows;
+  const customTasks = await listCustomTasksByLessonIds(
+    customLessons.map((lesson) => lesson.id),
+    { publishedOnly: true },
+  );
+  const customTasksByLessonId = customTasks.reduce<Record<string, typeof customTasks>>((acc, task) => {
+    if (!acc[task.lessonId]) {
+      acc[task.lessonId] = [];
+    }
+    acc[task.lessonId].push(task);
+    return acc;
+  }, {});
+
+  const result = [
     ...staticLessons
       .filter((lesson) => lesson.sectionId === sectionId)
       .map((lesson) => ({ ...lesson, source: "static" as const })),
@@ -78,9 +147,7 @@ export async function listLessonsBySectionId(sectionId: string): Promise<Catalog
         title: lesson.title,
         description: lesson.description,
         videoUrl: lesson.videoUrl,
-        tasks: customTasks
-          .filter((task) => task.lessonId === lesson.id)
-          .map(
+        tasks: (customTasksByLessonId[lesson.id] ?? []).map(
             (task): Task => ({
               id: task.id,
               type: task.type,
@@ -93,30 +160,36 @@ export async function listLessonsBySectionId(sectionId: string): Promise<Catalog
         source: "custom" as const,
       })),
   ];
+  setCached(cacheKey, result);
+  return result;
 }
 
 export async function getCatalogLessonById(lessonId: string): Promise<CatalogLesson | null> {
+  const cacheKey = `lesson:${lessonId}`;
+  const cached = getCached<CatalogLesson | null>(cacheKey);
+  if (cached !== null) return cached;
+
   const staticLesson = staticLessons.find((lesson) => lesson.id === lessonId);
   if (staticLesson) {
-    return { ...staticLesson, source: "static" };
+    const lesson = { ...staticLesson, source: "static" as const };
+    setCached(cacheKey, lesson);
+    return lesson;
   }
 
-  const customLessons = await listCustomLessons();
-  const customLesson = customLessons.find((lesson) => lesson.id === lessonId);
+  const customLesson = await findCustomLessonById(lessonId);
   if (!customLesson) {
+    setCached(cacheKey, null);
     return null;
   }
-  const customTasks = await listCustomTasks();
+  const customTasks = await listCustomTasksByLessonIds([customLesson.id], { publishedOnly: true });
 
-  return {
+  const result = {
     id: customLesson.id,
     sectionId: customLesson.sectionId,
     title: customLesson.title,
     description: customLesson.description,
     videoUrl: customLesson.videoUrl,
-    tasks: customTasks
-      .filter((task) => task.lessonId === customLesson.id)
-      .map(
+    tasks: customTasks.map(
         (task): Task => ({
           id: task.id,
           type: task.type,
@@ -126,8 +199,10 @@ export async function getCatalogLessonById(lessonId: string): Promise<CatalogLes
           solution: task.solution,
         }),
       ),
-    source: "custom",
+    source: "custom" as const,
   };
+  setCached(cacheKey, result);
+  return result;
 }
 
 export async function getCourseIdByLessonId(lessonId: string): Promise<string | null> {
@@ -139,7 +214,6 @@ export async function getCourseIdByLessonId(lessonId: string): Promise<string | 
     return staticSection.courseId;
   }
 
-  const customSections = await listCustomSections();
-  const customSection = customSections.find((section) => section.id === lesson.sectionId);
+  const customSection = await findCustomSectionById(lesson.sectionId);
   return customSection?.courseId ?? null;
 }

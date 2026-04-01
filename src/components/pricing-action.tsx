@@ -13,9 +13,15 @@ export function PricingAction() {
     setStatus(null);
 
     try {
-      const response = await fetch("/api/billing/create-checkout", { method: "POST" });
+      const response = await fetch("/api/billing/create-checkout", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ planId: "all_access" }),
+      });
 
-      let data: { message?: string; error?: string } = {};
+      let data: { message?: string; error?: string; payment?: { checkoutUrl?: string | null } } = {};
       try {
         data = (await response.json()) as { message?: string; error?: string };
       } catch {
@@ -28,6 +34,10 @@ export function PricingAction() {
       }
 
       setStatus(data.message ?? "Оплата выполнена");
+      if (data.payment?.checkoutUrl) {
+        window.location.href = data.payment.checkoutUrl;
+        return;
+      }
       router.refresh();
     } catch {
       setStatus("Сетевая ошибка. Попробуйте еще раз.");

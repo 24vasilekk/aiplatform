@@ -1,27 +1,23 @@
-# EGE AI Platform — MVP
+# EGE AI Platform — MVP (Часть 1-4)
 
-Рабочий MVP платформы подготовки к ЕГЭ (математика и физика).
+Рабочий MVP платформы подготовки к ЕГЭ (математика и физика) с платежами, прогрессом, аналитикой, observability и операционным контуром.
 
-## Реализовано
+## Что в релизе Часть 3/4
 
-- Регистрация и вход по `email + пароль`
-- Выход из аккаунта
-- Полноценное восстановление пароля (`forgot` + одноразовый токен + `reset`)
-- Личный кабинет с доступными/закрытыми курсами
-- Структура `Курс -> Раздел -> Урок`
-- Страница урока: видео + задания + AI-чат
-- Общий AI-чат
-- Оплата через `payment intent`-логику (готово к подключению внешней платежки)
-- Ограничение доступа к курсам без оплаты
-- Базовая админ-страница и защищенные admin API
-- Админ CRUD для курсов/разделов/уроков (создание, редактирование, удаление)
-- Загрузка фото/файлов в чат, OCR для изображений, извлечение текста и проверка таймкодов
+- production-ready платежный контур: checkout, webhook, идемпотентность, статусы, выдача доступов
+- кошелек/баланс: пополнение, списание, журнал транзакций, защита от двойного списания
+- прогресс ученика: курс/урок/задание + API для кабинета и админки
+- продуктовая и финансовая аналитика: DAU/WAU, конверсия, retention, покупки, дашборд
+- observability: structured logs, request/correlation id, health/readiness, метрики
+- security-hardening: rate limits, усиленные валидации, безопасные cookie, webhook hardening, admin audit log
+- масштабирование: read/write separation, очереди тяжелых задач, retry/backoff, idempotency keys
 
 ## Технологии
 
 - `Next.js 16` + `TypeScript` + `Tailwind CSS`
+- `Prisma` + `PostgreSQL`
 - JWT в HttpOnly cookie
-- `Prisma` + `SQLite` (`DATABASE_URL`)
+- Vitest + Testing Library
 
 ## Быстрый старт
 
@@ -34,58 +30,71 @@ npm run dev
 
 Открыть: `http://localhost:3000`
 
-## Проверка
+## Деплой на Vercel
+
+По умолчанию проект уже настроен через [vercel.json](./vercel.json):
+
+- install: `npm ci`
+- build: `npm run build:vercel`
+
+`build:vercel` выполняет:
+
+1. `prisma generate`
+2. `prisma migrate deploy`
+3. `next build`
+
+Если у вас legacy БД (раньше жили только на `db push`) и миграции падают, временно используйте fallback build command:
+
+- `npm run build:vercel:fallback`
+
+Если `migrate deploy` падает с `P3005`, выполните baseline один раз:
+
+```bash
+npm run prisma:migrate:baseline:part34
+```
+
+## Проверка качества
 
 ```bash
 npm run lint
+npm test
 npm run build
 ```
 
-## Демо-флоу
+## Релизные документы
 
-1. Зарегистрируйтесь на `/register`
-2. В кабинете откройте курс математики (доступ выдается автоматически)
-3. Для остальных курсов перейдите на `/pricing` и нажмите `Оплатить`
-4. Откройте урок, решите задания, попробуйте AI-чат
+- Часть 1: [docs/part-1.md](docs/part-1.md)
+- Часть 2: [docs/part-2.md](docs/part-2.md)
+- Часть 3: [docs/part-3.md](docs/part-3.md)
+- Часть 4: [docs/part-4.md](docs/part-4.md)
+- Финальный релиз 3/4: [docs/release-note-part-3-4.md](docs/release-note-part-3-4.md)
+- Runbook (запуск/диагностика/восстановление): [docs/runbook-part-3-4.md](docs/runbook-part-3-4.md)
+- Changelog: [docs/changelog-part-3-4.md](docs/changelog-part-3-4.md)
+- Roadmap следующего этапа: [docs/roadmap-next-stage.md](docs/roadmap-next-stage.md)
 
 ## Админ-доступ
 
 - Для роли admin зарегистрируйте аккаунт с email: `admin@ege.local`
 - После входа откройте `/admin`
 
-## Где данные
+## Ключевые env-переменные
 
-- БД: `DATABASE_URL` (по умолчанию `file:/tmp/ege-mvp-dev.db`)
-- Загруженные файлы: `data/uploads`
+- База: `DATABASE_URL`
+- JWT: `AUTH_JWT_SECRET`
+- Приложение: `APP_URL`
+- AI: `OPENROUTER_API_KEY`, `OPENROUTER_MODEL`
+- OAuth/Telegram: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `TELEGRAM_BOT_TOKEN`, `NEXT_PUBLIC_TELEGRAM_BOT_USERNAME`
+- Billing:
+  - `BILLING_PROVIDER=yookassa` (fallback: `mock`)
+  - `YOOKASSA_SHOP_ID`
+  - `YOOKASSA_SECRET_KEY`
+  - `BILLING_WEBHOOK_SECRET` (подпись `x-billing-signature`)
+  - `MOCK_BILLING_AUTOCONFIRM=1` (демо)
+- SMTP: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `SMTP_SECURE`
+- OCR/PDF: `PDF_OCR_MAX_PAGES`
 
-## OpenRouter (AI)
+## Где хранятся данные
 
-1. В `.env` укажите:
-   - `OPENROUTER_API_KEY=ваш_ключ`
-   - `OPENROUTER_MODEL=модель` (по умолчанию `openai/gpt-4o-mini`)
-2. Перезапустите dev-сервер.
-
-Если ключ не задан, AI работает в fallback-режиме с локальными демо-ответами.
-
-## SMTP (восстановление пароля)
-
-Для прод-отправки писем добавьте в `.env`:
-
-- `APP_URL=https://ваш-домен`
-- `SMTP_HOST=...`
-- `SMTP_PORT=587`
-- `SMTP_USER=...`
-- `SMTP_PASS=...`
-- `SMTP_FROM=EGE AI <no-reply@your-domain>`
-- `SMTP_SECURE=0` (или `1` для SSL/465)
-
-## Billing Provider
-
-- `BILLING_PROVIDER=mock` (по умолчанию), можно переключить на `yookassa`/`stripe`
-- `BILLING_WEBHOOK_SECRET=...`
-- `MOCK_BILLING_AUTOCONFIRM=1` (для демо-подтверждения)
-
-## PDF OCR
-
-- По умолчанию OCR fallback пытается обработать весь PDF.
-- Для ограничения страниц можно задать `PDF_OCR_MAX_PAGES=...`.
+- PostgreSQL: бизнес-данные, события, платежи, очередь задач
+- Файлы загрузок: `data/uploads`
+- Файлы датасетов: `data/dataset-files`

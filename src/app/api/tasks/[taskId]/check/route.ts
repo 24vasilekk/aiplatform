@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { lessons } from "@/lib/mvp-data";
-import { findCustomTaskById, saveTaskAttempt } from "@/lib/db";
+import { createAnalyticsEvent, findCustomTaskById, saveTaskAttempt } from "@/lib/db";
 import { requireUser } from "@/lib/api-auth";
 
 const schema = z.object({
@@ -12,6 +12,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ taskId: string }> },
 ) {
+  const requestPath = new URL(request.url).pathname;
   const auth = await requireUser(request);
   if (auth.error || !auth.user) {
     return auth.error;
@@ -24,11 +25,17 @@ export async function POST(
     return NextResponse.json({ error: "Введите ответ" }, { status: 400 });
   }
 
-  const task = lessons.flatMap((lesson) => lesson.tasks).find((item) => item.id === taskId);
+  const staticLesson = lessons.find((lesson) => lesson.tasks.some((item) => item.id === taskId));
+  const task = staticLesson?.tasks.find((item) => item.id === taskId) ?? null;
   const customTask = task ? null : await findCustomTaskById(taskId);
   const resolvedTask = task ?? customTask;
+  const resolvedLessonId = staticLesson?.id ?? customTask?.lessonId ?? null;
 
-  if (!resolvedTask) {
+  if (!resolvedTask || !resolvedLessonId) {
+    return NextResponse.json({ error: "Task not found" }, { status: 404 });
+  }
+
+  if (customTask && customTask.status !== "published" && auth.user.role !== "admin") {
     return NextResponse.json({ error: "Task not found" }, { status: 404 });
   }
 
@@ -40,8 +47,19 @@ export async function POST(
     await saveTaskAttempt({
       userId: auth.user.id,
       taskId,
+      lessonId: resolvedLessonId,
       answerText: parsed.data.answer,
       isCorrect,
+    });
+    await createAnalyticsEvent({
+      eventName: "task_checked",
+      userId: auth.user.id,
+      path: requestPath,
+      payload: {
+        taskId,
+        lessonId: resolvedLessonId,
+        isCorrect,
+      },
     });
   } catch {
     // Allow response even if persistence is unavailable (e.g., read-only serverless fs).

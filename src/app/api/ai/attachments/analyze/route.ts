@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireUser } from "@/lib/api-auth";
 import { buildAttachmentContext, extractTimecodes, extractUploadContent } from "@/lib/attachment-ai";
 import { findUserUploadById, updateUserUploadText } from "@/lib/db";
+import { applyRateLimitHeaders, createRateLimitResponse, hasJsonContentType, rateLimitByRequest } from "@/lib/security";
 
 const schema = z.object({
   uploadId: z.string().trim().min(10),
@@ -14,15 +15,35 @@ export async function POST(request: NextRequest) {
   if (auth.error || !auth.user) {
     return auth.error;
   }
+  const rateLimit = rateLimitByRequest({
+    request,
+    namespace: "ai-attachments-analyze",
+    keySuffix: auth.user.id,
+    limit: 30,
+    windowMs: 10 * 60 * 1_000,
+  });
+  if (!rateLimit.ok) {
+    return createRateLimitResponse(rateLimit, "Слишком много AI-запросов. Попробуйте позже.");
+  }
+
+  if (!hasJsonContentType(request)) {
+    const response = NextResponse.json({ error: "Ожидается JSON-запрос" }, { status: 415 });
+    applyRateLimitHeaders(response, rateLimit);
+    return response;
+  }
 
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: "Неверные данные запроса" }, { status: 400 });
+    const response = NextResponse.json({ error: "Неверные данные запроса" }, { status: 400 });
+    applyRateLimitHeaders(response, rateLimit);
+    return response;
   }
 
   const upload = await findUserUploadById(parsed.data.uploadId, auth.user.id);
   if (!upload) {
-    return NextResponse.json({ error: "Файл не найден" }, { status: 404 });
+    const response = NextResponse.json({ error: "Файл не найден" }, { status: 404 });
+    applyRateLimitHeaders(response, rateLimit);
+    return response;
   }
 
   const extracted = await extractUploadContent({
@@ -43,7 +64,7 @@ export async function POST(request: NextRequest) {
     timecodes,
   });
 
-  return NextResponse.json({
+  const response = NextResponse.json({
     ok: true,
     upload: savedUpload,
     extractedText,
@@ -52,4 +73,6 @@ export async function POST(request: NextRequest) {
     outOfRangeTimecodes: outOfRange,
     context,
   });
+  applyRateLimitHeaders(response, rateLimit);
+  return response;
 }

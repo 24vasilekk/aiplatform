@@ -5,6 +5,7 @@ import { useState } from "react";
 import { AuthControls } from "@/components/auth-controls";
 
 const links = [
+  { href: "/blog", label: "Блог" },
   { href: "/dashboard", label: "Кабинет" },
   { href: "/tutors", label: "Репетиторы" },
   { href: "/chat", label: "Общий AI-чат" },

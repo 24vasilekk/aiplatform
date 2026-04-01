@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/api-auth";
-import { deleteCustomLesson, updateCustomLesson } from "@/lib/db";
+import { createAdminAuditLog, deleteCustomLesson, updateCustomLesson } from "@/lib/db";
 
 const schema = z.object({
   title: z.string().trim().min(2).optional(),
@@ -12,14 +12,14 @@ const schema = z.object({
 async function authorize(request: NextRequest) {
   const auth = await requireUser(request);
   if (auth.error || !auth.user) {
-    return { error: auth.error };
+    return { error: auth.error, user: null };
   }
 
   if (auth.user.role !== "admin") {
-    return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
+    return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }), user: null };
   }
 
-  return { error: null };
+  return { error: null, user: auth.user };
 }
 
 export async function PATCH(
@@ -27,7 +27,7 @@ export async function PATCH(
   { params }: { params: Promise<{ lessonId: string }> },
 ) {
   const auth = await authorize(request);
-  if (auth.error) return auth.error;
+  if (auth.error || !auth.user) return auth.error;
 
   const { lessonId } = await params;
   const parsed = schema.safeParse(await request.json().catch(() => null));
@@ -39,6 +39,13 @@ export async function PATCH(
   if (!lesson) {
     return NextResponse.json({ error: "Урок не найден" }, { status: 404 });
   }
+  await createAdminAuditLog({
+    adminUserId: auth.user.id,
+    action: "update_lesson",
+    entityType: "lesson",
+    entityId: lesson.id,
+    metadata: parsed.data,
+  });
 
   return NextResponse.json({ ok: true, lesson });
 }
@@ -48,7 +55,7 @@ export async function DELETE(
   { params }: { params: Promise<{ lessonId: string }> },
 ) {
   const auth = await authorize(request);
-  if (auth.error) return auth.error;
+  if (auth.error || !auth.user) return auth.error;
 
   const { lessonId } = await params;
   const ok = await deleteCustomLesson(lessonId);
@@ -56,6 +63,12 @@ export async function DELETE(
   if (!ok) {
     return NextResponse.json({ error: "Урок не найден" }, { status: 404 });
   }
+  await createAdminAuditLog({
+    adminUserId: auth.user.id,
+    action: "delete_lesson",
+    entityType: "lesson",
+    entityId: lessonId,
+  });
 
   return NextResponse.json({ ok: true });
 }

@@ -10,16 +10,40 @@ datasource db {
 model User {
   id             String               @id @default(cuid())
   email          String               @unique
-  passwordHash   String
+  passwordHash   String?
   role           UserRole             @default(STUDENT)
   createdAt      DateTime             @default(now())
+  authAccounts   AuthAccount[]
+  analyticsEvents AnalyticsEvent[]
   accesses       CourseAccess[]
   lessonProgress LessonProgress[]
   taskAttempts   TaskAttempt[]
+  taskProgress   TaskProgress[]
   chatSessions   ChatSession[]
   resetTokens    PasswordResetToken[]
   payments       PaymentIntent[]
   uploads        UserUpload[]
+  aiAnalyses     AiSolutionAnalysis[]
+  wallet         Wallet?
+  walletTransactions WalletTransaction[]
+  adminAuditLogs AdminAuditLog[]      @relation("AdminAuditActor")
+  errorLogs      ServiceError[]
+  paymentEvents  PaymentEvent[]
+
+  @@index([role, createdAt])
+}
+
+model AuthAccount {
+  id                String   @id @default(cuid())
+  userId            String
+  provider          String
+  providerAccountId String
+  createdAt         DateTime @default(now())
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@unique([userId, provider])
+  @@index([userId])
 }
 
 model CourseAccess {
@@ -33,6 +57,7 @@ model CourseAccess {
 
   @@unique([userId, courseId])
   @@index([userId])
+  @@index([courseId, userId])
 }
 
 model LessonProgress {
@@ -104,6 +129,7 @@ model CustomSection {
   lessons   CustomLesson[]
 
   @@index([courseId])
+  @@index([courseId, createdAt])
 }
 
 model CustomLesson {
@@ -117,20 +143,28 @@ model CustomLesson {
   tasks       CustomTask[]
 
   @@index([sectionId])
+  @@index([sectionId, createdAt])
 }
 
 model CustomTask {
   id        String    @id
   lessonId  String
   type      TaskType
+  status    TaskStatus @default(PUBLISHED)
   question  String
   options   String?
   answer    String
   solution  String
+  difficulty Int      @default(2)
+  topicTags String?
+  exemplarSolution String?
+  evaluationCriteria String?
   createdAt DateTime  @default(now())
   lesson    CustomLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
 
   @@index([lessonId])
+  @@index([lessonId, status, createdAt])
+  @@index([status, createdAt])
 }
 
 model PasswordResetToken {
@@ -154,14 +188,96 @@ model PaymentIntent {
   status            PaymentStatus @default(CREATED)
   provider          String        @default("mock")
   providerPaymentId String?
+  idempotencyKey    String?
   checkoutToken     String        @unique
   metadata          String?
+  failedAt          DateTime?
+  canceledAt        DateTime?
+  failureReason     String?
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
   paidAt            DateTime?
   user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events            PaymentEvent[]
 
+  @@unique([userId, idempotencyKey])
   @@index([userId, status])
+  @@index([userId, createdAt])
+  @@index([planId, createdAt])
+  @@index([status, createdAt])
+  @@index([provider, createdAt])
+  @@index([paidAt])
+}
+
+model PaymentEvent {
+  id             String        @id @default(cuid())
+  paymentId      String
+  userId         String
+  provider       String
+  providerEventId String
+  status         PaymentStatus
+  payload        Json?
+  createdAt      DateTime      @default(now())
+  payment        PaymentIntent  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerEventId])
+  @@index([paymentId, createdAt])
+  @@index([userId, createdAt])
+}
+
+model TaskProgress {
+  id               String           @id @default(cuid())
+  userId           String
+  taskId           String
+  lessonId         String
+  status           ProgressStatus   @default(NOT_STARTED)
+  scorePercent     Int?
+  attemptsCount    Int              @default(0)
+  firstCompletedAt DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, taskId])
+  @@index([userId, lessonId, updatedAt])
+  @@index([lessonId, status])
+}
+
+model Wallet {
+  id             String              @id @default(cuid())
+  userId         String              @unique
+  balanceCents   Int                 @default(0)
+  currency       String              @default("RUB")
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions   WalletTransaction[]
+}
+
+model WalletTransaction {
+  id               String                @id @default(cuid())
+  walletId         String
+  userId           String
+  direction        WalletDirection
+  operationType    WalletOperationType
+  amountCents      Int
+  balanceBefore    Int
+  balanceAfter     Int
+  paymentIntentId  String?
+  idempotencyKey   String?
+  metadata         Json?
+  createdAt        DateTime              @default(now())
+  wallet           Wallet                @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  user             User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, idempotencyKey])
+  @@index([userId, createdAt])
+  @@index([userId, operationType, createdAt])
+  @@index([walletId, createdAt])
+  @@index([operationType, createdAt])
+  @@index([paymentIntentId])
 }
 
 model UserUpload {
@@ -190,6 +306,166 @@ model LessonKnowledge {
   textChars     Int      @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+model AiSolutionAnalysis {
+  id          String   @id @default(cuid())
+  userId      String
+  lessonId    String?
+  taskId      String?
+  mode        String   @default("default")
+  status      String   @default("completed")
+  model       String?
+  latencyMs   Int?
+  input       Json
+  result      Json?
+  error       Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  completedAt DateTime?
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([taskId, createdAt])
+  @@index([lessonId, createdAt])
+  @@index([status, createdAt])
+  @@index([userId, status, createdAt])
+}
+
+model DatasetFile {
+  id           String   @id @default(cuid())
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  storagePath  String
+  processingStatus DatasetProcessingStatus @default(UPLOADED)
+  extractedText String?
+  summary      String?
+  pageCount    Int?
+  textChars    Int      @default(0)
+  processingError String?
+  processedAt  DateTime?
+  createdAt    DateTime @default(now())
+  chunks       DatasetTextChunk[]
+
+  @@index([createdAt])
+  @@index([processingStatus, createdAt])
+}
+
+model DatasetTextChunk {
+  id            String   @id @default(cuid())
+  datasetFileId String
+  chunkIndex    Int
+  content       String
+  charCount     Int
+  createdAt     DateTime @default(now())
+  datasetFile   DatasetFile @relation(fields: [datasetFileId], references: [id], onDelete: Cascade)
+
+  @@index([datasetFileId, chunkIndex])
+  @@unique([datasetFileId, chunkIndex])
+}
+
+model Post {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  excerpt     String
+  content     String
+  coverImage  String?
+  publishedAt DateTime?
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isPublished, publishedAt])
+  @@index([publishedAt])
+}
+
+model AnalyticsEvent {
+  id        String   @id @default(cuid())
+  eventName String
+  userId    String?
+  path      String?
+  payload   Json?
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([eventName, createdAt])
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@index([eventName, userId, createdAt])
+  @@index([path, createdAt])
+}
+
+model DailyMetricAggregate {
+  id                 String   @id @default(cuid())
+  day                DateTime @unique
+  dau                Int      @default(0)
+  wau                Int      @default(0)
+  registrations      Int      @default(0)
+  paidUsers          Int      @default(0)
+  paymentConversion  Float    @default(0)
+  retainedD1         Int      @default(0)
+  retainedD7         Int      @default(0)
+  aiChatMessages     Int      @default(0)
+  revenueCents       Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([day])
+}
+
+model AdminAuditLog {
+  id          String   @id @default(cuid())
+  adminUserId String
+  action      String
+  entityType  String
+  entityId    String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  adminUser   User     @relation("AdminAuditActor", fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId, createdAt])
+  @@index([entityType, createdAt])
+  @@index([entityType, entityId, createdAt])
+  @@index([action, createdAt])
+}
+
+model ServiceError {
+  id            String   @id @default(cuid())
+  requestId     String?
+  route         String?
+  level         LogLevel @default(ERROR)
+  message       String
+  details       Json?
+  stack         String?
+  occurredAt    DateTime @default(now())
+  userId        String?
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([occurredAt])
+  @@index([level, occurredAt])
+  @@index([route, occurredAt])
+  @@index([requestId])
+}
+
+model JobQueue {
+  id             String    @id @default(cuid())
+  jobType        String
+  payload        Json
+  status         JobStatus @default(PENDING)
+  runAt          DateTime  @default(now())
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(5)
+  lastError      String?
+  idempotencyKey String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  completedAt    DateTime?
+
+  @@unique([jobType, idempotencyKey])
+  @@index([status, runAt])
+  @@index([jobType, createdAt])
 }
 
 enum UserRole {
@@ -230,6 +506,20 @@ enum TaskType {
   choice
 }
 
+enum TaskStatus {
+  PUBLISHED
+  UNPUBLISHED
+  ARCHIVED
+}
+
+enum DatasetProcessingStatus {
+  UPLOADED
+  PARSED
+  PROCESSING
+  READY
+  FAILED
+}
+
 enum PaymentStatus {
   CREATED
   REQUIRES_ACTION
@@ -237,4 +527,31 @@ enum PaymentStatus {
   SUCCEEDED
   FAILED
   CANCELED
+}
+
+enum WalletDirection {
+  CREDIT
+  DEBIT
+}
+
+enum WalletOperationType {
+  TOPUP
+  PURCHASE
+  REFUND
+  MANUAL_ADJUSTMENT
+}
+
+enum LogLevel {
+  DEBUG
+  INFO
+  WARN
+  ERROR
+  FATAL
+}
+
+enum JobStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
 }

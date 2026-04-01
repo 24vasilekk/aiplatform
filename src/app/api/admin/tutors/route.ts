@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/api-auth";
 import { createTutorListing, listTutorListings } from "@/lib/tutor-market";
+import { createAdminAuditLog } from "@/lib/db";
 
 const schema = z.object({
   name: z.string().trim().min(2),
@@ -41,5 +42,16 @@ export async function POST(request: NextRequest) {
   }
 
   const tutor = await createTutorListing(parsed.data);
+  await createAdminAuditLog({
+    adminUserId: auth.user.id,
+    action: "create_tutor_listing",
+    entityType: "tutor_listing",
+    entityId: tutor.id,
+    metadata: {
+      subject: tutor.subject,
+      city: tutor.city,
+      pricePerHour: tutor.pricePerHour,
+    },
+  });
   return NextResponse.json({ tutor }, { status: 201 });
 }

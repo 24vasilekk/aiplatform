@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Task } from "@/lib/mvp-data";
 import { ChatMessageContent } from "@/components/chat-message-content";
+import { AiModeSwitcher } from "@/components/ai-mode-switcher";
+import { getAiModeDraftPrefix, type AiMode } from "@/lib/ai-mode";
 
 type Message = {
   id: string;
@@ -23,28 +25,19 @@ export function LessonWorkspace({
   const [results, setResults] = useState<Record<string, { ok: boolean; solution: string }>>({});
   const [messages, setMessages] = useState<Message[]>([]);
   const [message, setMessage] = useState("");
-  const [mode, setMode] = useState<"default" | "beginner" | "similar_task">("default");
+  const [mode, setMode] = useState<AiMode>("default");
   const [loading, setLoading] = useState(false);
   const [sendStatus, setSendStatus] = useState<string | null>(null);
   const [attachmentContext, setAttachmentContext] = useState<string | null>(null);
   const [attachmentStatus, setAttachmentStatus] = useState<string | null>(null);
   const [processingAttachment, setProcessingAttachment] = useState(false);
 
-  const quickModes = useMemo(
-    () =>
-      [
-        { id: "beginner", label: "Для новичка" },
-      ] as const,
-    [],
-  );
-
-  function applyMode(nextMode: "default" | "beginner" | "similar_task") {
+  function applyMode(nextMode: AiMode) {
     setMode(nextMode);
     setSendStatus(null);
     setMessage((current) => {
       if (current.trim().length > 0) return current;
-      if (nextMode === "beginner") return "Объясни как для новичка: ";
-      return "";
+      return getAiModeDraftPrefix(nextMode);
     });
   }
 
@@ -250,22 +243,7 @@ export function LessonWorkspace({
 
       <aside className="card-soft space-y-4 p-6">
         <h2>AI-чат урока</h2>
-        <div className="flex flex-wrap gap-2">
-          {quickModes.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={
-                mode === item.id
-                  ? "inline-flex items-center justify-center rounded-lg border border-sky-500 bg-sky-500 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-[transform,box-shadow,background-color,border-color,color,opacity] duration-200 ease-out hover:border-sky-400 hover:bg-sky-400 hover:shadow-[0_4px_10px_rgba(14,165,233,0.24)] active:scale-[0.98]"
-                  : "inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition-[transform,box-shadow,background-color,border-color,color,opacity] duration-200 ease-out hover:border-sky-400 hover:bg-sky-50 hover:text-sky-700 hover:shadow-[0_4px_10px_rgba(15,23,42,0.08)] active:scale-[0.98]"
-              }
-              onClick={() => applyMode(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
+        <AiModeSwitcher mode={mode} onChange={applyMode} />
         <div className="max-h-[240px] space-y-2 overflow-y-auto rounded-lg border border-sky-200 p-2 text-sm sm:max-h-[280px]">
           {messages.length === 0 ? <p className="text-slate-600">Задайте первый вопрос.</p> : null}
           {messages.map((item) => (

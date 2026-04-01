@@ -5,8 +5,16 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:vercel": "npm run prisma:generate && npm run prisma:migrate:deploy && next build",
+    "build:vercel:fallback": "npm run prisma:generate && (npm run prisma:migrate:deploy || npm run prisma:db:push) && next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:db:push": "prisma db push --skip-generate",
+    "prisma:migrate:baseline:part34": "prisma migrate resolve --applied 20260401090000_google_oauth && prisma migrate resolve --applied 20260401094000_add_blog_posts && prisma migrate resolve --applied 20260401103000_add_analytics_events && prisma migrate resolve --applied 20260401120000_part3_part4_ops && prisma migrate resolve --applied 20260401143000_performance_hardening_indexes"
   },
   "dependencies": {
     "@prisma/client": "^6.16.2",
@@ -26,13 +34,18 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^20",
     "@types/nodemailer": "^7.0.11",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
+    "jsdom": "^29.0.1",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.2"
   }
 }

@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getCurrentUser, getDemoPaidAccessSnapshot } from "@/lib/auth";
-import { hasCourseAccess, listProgress } from "@/lib/db";
+import { getWalletSnapshot, hasCourseAccess } from "@/lib/db";
 import { listAllCourses } from "@/lib/course-catalog";
+import { buildUserProgressSnapshot } from "@/lib/progress";
+import { WalletPanel } from "@/components/wallet-panel";
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
@@ -10,7 +12,8 @@ export default async function DashboardPage() {
     redirect("/login");
   }
 
-  const progress = await listProgress(user.id);
+  const progress = await buildUserProgressSnapshot(user.id);
+  const walletSnapshot = await getWalletSnapshot(user.id, 20);
   const paidSnapshot = await getDemoPaidAccessSnapshot();
 
   const courses = await listAllCourses();
@@ -23,35 +26,46 @@ export default async function DashboardPage() {
         (await hasCourseAccess(user.id, course.id)),
     })),
   );
+  const courseProgressById = new Map(progress.courses.map((course) => [course.courseId, course] as const));
 
   return (
     <section className="space-y-4">
       <h1>Личный кабинет</h1>
       <p className="text-sm text-slate-700">Пользователь: {user.email}</p>
-      <p className="text-sm text-slate-700">Просмотрено уроков: {progress.filter((item) => item.status === "completed").length}</p>
+      <p className="text-sm text-slate-700">
+        Прогресс: {progress.summary.percent}% ({progress.summary.completedLessons}/{progress.summary.totalLessons} уроков)
+      </p>
+
+      <WalletPanel initialSnapshot={walletSnapshot} />
 
       <div className="grid gap-4 md:grid-cols-2">
-        {items.map((course) => (
-          <article key={course.id} className="card-soft card-soft-hover flex h-full flex-col p-6">
-            <div className="space-y-2">
-              <p className="text-xs uppercase tracking-wide text-sky-700">{course.subject}</p>
-              <h2>{course.title}</h2>
-              <p className="text-sm text-slate-700">{course.description}</p>
-            </div>
-            <p className="mt-4 text-sm">Прогресс: {course.progress}%</p>
-            <div className="mt-auto pt-6">
-              {course.hasAccess ? (
-                <Link href={`/courses/${course.id}`} className="btn-primary inline-flex w-fit">
-                  Открыть курс
-                </Link>
-              ) : (
-                <Link href="/pricing" className="btn-ghost inline-flex w-fit">
-                  Открыть доступ
-                </Link>
-              )}
-            </div>
-          </article>
-        ))}
+        {items.map((course) => {
+          const courseProgress = courseProgressById.get(course.id);
+          return (
+            <article key={course.id} className="card-soft card-soft-hover flex h-full flex-col p-6">
+              <div className="space-y-2">
+                <p className="text-xs uppercase tracking-wide text-sky-700">{course.subject}</p>
+                <h2>{course.title}</h2>
+                <p className="text-sm text-slate-700">{course.description}</p>
+              </div>
+              <p className="mt-4 text-sm">
+                Прогресс: {courseProgress?.percent ?? course.progress}% ({courseProgress?.completedLessons ?? 0}/
+                {courseProgress?.totalLessons ?? 0} уроков)
+              </p>
+              <div className="mt-auto pt-6">
+                {course.hasAccess ? (
+                  <Link href={`/courses/${course.id}`} className="btn-primary inline-flex w-fit">
+                    Открыть курс
+                  </Link>
+                ) : (
+                  <Link href="/pricing" className="btn-ghost inline-flex w-fit">
+                    Открыть доступ
+                  </Link>
+                )}
+              </div>
+            </article>
+          );
+        })}
       </div>
     </section>
   );

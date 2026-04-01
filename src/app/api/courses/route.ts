@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/api-auth";
 import { hasCourseAccess } from "@/lib/db";
 import { listAllCourses } from "@/lib/course-catalog";
 import { DEMO_PAID_COOKIE, DEMO_PAID_COURSES_COOKIE } from "@/lib/auth";
+import { applyPrivateCache } from "@/lib/http-cache";
 
 export async function GET(request: NextRequest) {
   const { user } = await requireUser(request);
@@ -23,5 +24,11 @@ export async function GET(request: NextRequest) {
     })),
   );
 
-  return NextResponse.json(data);
+  const response = NextResponse.json(data);
+  response.headers.set("vary", "cookie");
+  applyPrivateCache(response, {
+    maxAgeSec: 30,
+    staleWhileRevalidateSec: 120,
+  });
+  return response;
 }

@@ -3,41 +3,79 @@ import { z } from "zod";
 import { requireUser } from "@/lib/api-auth";
 import { DEMO_PAID_COOKIE, DEMO_PAID_COURSES_COOKIE } from "@/lib/auth";
 import { createCheckout, getBillingProvider, resolvePlanCourseIds, type PlanId } from "@/lib/billing";
+import { createAnalyticsEvent } from "@/lib/db";
+import { observeRequest } from "@/lib/observability";
+import {
+  applyRateLimitHeaders,
+  createRateLimitResponse,
+  hasJsonContentType,
+  rateLimitByRequest,
+} from "@/lib/security";
 
 const schema = z.object({
   planId: z.enum(["math_only", "bundle_2", "all_access"]).default("all_access"),
   email: z.email().optional(),
+  provider: z.enum(["yookassa", "mock"]).optional(),
+  idempotencyKey: z.string().trim().min(8).max(120).optional(),
 });
 
 export async function POST(request: NextRequest) {
-  const auth = await requireUser(request);
-  if (auth.error || !auth.user) {
-    return auth.error;
-  }
+  return observeRequest({
+    request,
+    operation: "billing.create_checkout",
+    handler: async () => {
+      const auth = await requireUser(request);
+      if (auth.error || !auth.user) {
+        return auth.error;
+      }
 
-  const parsed = schema.safeParse(await request.json().catch(() => ({})));
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Неверные данные оплаты" }, { status: 400 });
-  }
+      const rateLimit = rateLimitByRequest({
+        request,
+        namespace: "billing-create-checkout",
+        keySuffix: auth.user.id,
+        limit: 20,
+        windowMs: 10 * 60 * 1000,
+      });
+      if (!rateLimit.ok) {
+        return createRateLimitResponse(rateLimit, "Слишком много попыток создания оплаты. Попробуйте позже.");
+      }
+      if (!hasJsonContentType(request)) {
+        const response = NextResponse.json({ error: "Ожидается JSON-запрос" }, { status: 415 });
+        applyRateLimitHeaders(response, rateLimit);
+        return response;
+      }
 
-  const { planId, email } = parsed.data;
-  let checkout: Awaited<ReturnType<typeof createCheckout>> | null = null;
-  let checkoutFailed = false;
+      const parsed = schema.safeParse(await request.json().catch(() => ({})));
+      if (!parsed.success) {
+        const response = NextResponse.json({ error: "Неверные данные оплаты" }, { status: 400 });
+        applyRateLimitHeaders(response, rateLimit);
+        return response;
+      }
 
-  try {
-    checkout = await createCheckout({
-      userId: auth.user.id,
-      planId: planId as PlanId,
-      email,
-    });
-  } catch {
-    checkoutFailed = true;
-  }
+      const { planId, email, provider, idempotencyKey } = parsed.data;
+      const requestPath = new URL(request.url).pathname;
+      const headerIdempotencyKey = request.headers.get("x-idempotency-key")?.trim() ?? "";
+      const resolvedIdempotencyKey = idempotencyKey ?? (headerIdempotencyKey || null);
+      let checkout: Awaited<ReturnType<typeof createCheckout>> | null = null;
 
-  if (!checkout) {
-    if (auth.user.role !== "admin") {
-      return NextResponse.json({ error: "Ошибка оплаты" }, { status: 500 });
-    }
+      try {
+        checkout = await createCheckout({
+          userId: auth.user.id,
+          planId: planId as PlanId,
+          email,
+          idempotencyKey: resolvedIdempotencyKey,
+          preferredProvider: provider ?? null,
+        });
+      } catch {
+        checkout = null;
+      }
+
+      if (!checkout) {
+        if (auth.user.role !== "admin") {
+          const response = NextResponse.json({ error: "Ошибка оплаты" }, { status: 500 });
+          applyRateLimitHeaders(response, rateLimit);
+          return response;
+        }
 
     // Fallback for builtin admin sessions that may not have a DB user row.
     const planCourseIds = await resolvePlanCourseIds(planId as PlanId);
@@ -50,21 +88,21 @@ export async function POST(request: NextRequest) {
         status: "succeeded",
         amountCents: 0,
         currency: "RUB",
-        fallback: checkoutFailed,
+        fallback: true,
       },
     });
 
     if (planId === "all_access") {
       response.cookies.set(DEMO_PAID_COOKIE, "1", {
         httpOnly: true,
-        sameSite: "lax",
+        sameSite: "strict",
         secure: process.env.NODE_ENV === "production",
         path: "/",
         maxAge: 60 * 60 * 24 * 30,
       });
       response.cookies.set(DEMO_PAID_COURSES_COOKIE, "", {
         httpOnly: true,
-        sameSite: "lax",
+        sameSite: "strict",
         secure: process.env.NODE_ENV === "production",
         path: "/",
         maxAge: 0,
@@ -72,90 +110,141 @@ export async function POST(request: NextRequest) {
     } else {
       response.cookies.set(DEMO_PAID_COOKIE, "0", {
         httpOnly: true,
-        sameSite: "lax",
+        sameSite: "strict",
         secure: process.env.NODE_ENV === "production",
         path: "/",
         maxAge: 60 * 60 * 24 * 30,
       });
       response.cookies.set(DEMO_PAID_COURSES_COOKIE, planCourseIds.join(","), {
         httpOnly: true,
-        sameSite: "lax",
+        sameSite: "strict",
         secure: process.env.NODE_ENV === "production",
         path: "/",
         maxAge: 60 * 60 * 24 * 30,
       });
     }
 
-    return response;
-  }
+        applyRateLimitHeaders(response, rateLimit);
+        return response;
+      }
 
-  const planLabel =
+      const planLabel =
     planId === "math_only"
       ? "Курс по математике"
       : planId === "bundle_2"
         ? "Пакет 1+1 (математика + физика)"
         : "Доступ ко всем курсам";
 
-  const response = NextResponse.json({
+      const response = NextResponse.json({
     ok: true,
-    message: checkout.finalStatus === "succeeded"
-      ? `Оплата подтверждена: ${planLabel}. Доступ открыт.`
-      : `Счет создан: ${planLabel}. Провайдер: ${getBillingProvider()}. Ожидаем подтверждение оплаты.`,
+    message:
+      checkout.finalStatus === "succeeded"
+        ? `Оплата подтверждена: ${planLabel}. Доступ открыт.`
+        : checkout.checkoutUrl
+          ? `Счет создан: ${planLabel}. Перенаправляем на оплату (${checkout.provider}).`
+          : `Счет создан: ${planLabel}. Провайдер: ${checkout.provider || getBillingProvider()}. Ожидаем подтверждение оплаты.`,
     payment: {
       id: checkout.payment.id,
       checkoutToken: checkout.payment.checkoutToken,
       status: checkout.finalStatus,
       amountCents: checkout.payment.amountCents,
       currency: checkout.payment.currency,
+      provider: checkout.provider,
+      providerPaymentId: checkout.payment.providerPaymentId,
+      checkoutUrl: checkout.checkoutUrl,
+      fallbackUsed: checkout.fallbackUsed,
+      idempotencyKey: checkout.payment.idempotencyKey,
     },
   });
 
-  if (checkout.finalStatus === "succeeded" && planId === "all_access") {
+      await createAnalyticsEvent({
+    eventName: "checkout_created",
+    userId: auth.user.id,
+    path: requestPath,
+    payload: {
+      planId,
+      provider: checkout.provider,
+      amountCents: checkout.payment.amountCents,
+      status: checkout.finalStatus,
+      fallbackUsed: checkout.fallbackUsed,
+    },
+  });
+      if (checkout.finalStatus === "succeeded") {
+    await createAnalyticsEvent({
+      eventName: "payment_succeeded",
+      userId: auth.user.id,
+      path: requestPath,
+      payload: {
+        planId,
+        provider: checkout.provider,
+        amountCents: checkout.payment.amountCents,
+      },
+    });
+      } else if (checkout.finalStatus === "failed") {
+    await createAnalyticsEvent({
+      eventName: "payment_failed",
+      userId: auth.user.id,
+      path: requestPath,
+      payload: { planId, provider: checkout.provider },
+    });
+      } else if (checkout.finalStatus === "canceled") {
+    await createAnalyticsEvent({
+      eventName: "payment_canceled",
+      userId: auth.user.id,
+      path: requestPath,
+      payload: { planId, provider: checkout.provider },
+    });
+  }
+
+      if (checkout.finalStatus === "succeeded" && planId === "all_access") {
     response.cookies.set(DEMO_PAID_COOKIE, "1", {
       httpOnly: true,
-      sameSite: "lax",
+      sameSite: "strict",
       secure: process.env.NODE_ENV === "production",
       path: "/",
       maxAge: 60 * 60 * 24 * 30,
     });
     response.cookies.set(DEMO_PAID_COURSES_COOKIE, "", {
       httpOnly: true,
-      sameSite: "lax",
+      sameSite: "strict",
       secure: process.env.NODE_ENV === "production",
       path: "/",
       maxAge: 0,
     });
-  } else if (checkout.finalStatus === "succeeded") {
+      } else if (checkout.finalStatus === "succeeded") {
     response.cookies.set(DEMO_PAID_COOKIE, "0", {
       httpOnly: true,
-      sameSite: "lax",
+      sameSite: "strict",
       secure: process.env.NODE_ENV === "production",
       path: "/",
       maxAge: 60 * 60 * 24 * 30,
     });
     response.cookies.set(DEMO_PAID_COURSES_COOKIE, checkout.planCourseIds.join(","), {
       httpOnly: true,
-      sameSite: "lax",
+      sameSite: "strict",
       secure: process.env.NODE_ENV === "production",
       path: "/",
       maxAge: 60 * 60 * 24 * 30,
     });
-  } else {
+      } else {
     response.cookies.set(DEMO_PAID_COOKIE, "0", {
       httpOnly: true,
-      sameSite: "lax",
+      sameSite: "strict",
       secure: process.env.NODE_ENV === "production",
       path: "/",
       maxAge: 60 * 60 * 24 * 30,
     });
     response.cookies.set(DEMO_PAID_COURSES_COOKIE, "", {
       httpOnly: true,
-      sameSite: "lax",
+      sameSite: "strict",
       secure: process.env.NODE_ENV === "production",
       path: "/",
       maxAge: 0,
     });
   }
 
-  return response;
+      applyRateLimitHeaders(response, rateLimit);
+      return response;
+    },
+  });
 }
