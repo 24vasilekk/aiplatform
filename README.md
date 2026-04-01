@@ -40,10 +40,15 @@ npm run dev
 `build:vercel` выполняет:
 
 1. `prisma generate`
-2. `prisma migrate deploy`
-3. `next build`
+2. `next build`
 
-Если у вас legacy БД (раньше жили только на `db push`) и миграции падают, временно используйте fallback build command:
+Миграции применяются отдельным шагом деплоя:
+
+```bash
+npm run deploy:migrate
+```
+
+Если у вас legacy БД (раньше жили только на `db push`) и миграции падают, временно используйте fallback-команду:
 
 - `npm run build:vercel:fallback`
 

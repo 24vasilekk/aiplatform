@@ -37,8 +37,13 @@ npm run build
 Что делает `build:vercel`:
 
 1. `prisma generate`
-2. `prisma migrate deploy`
-3. `next build`
+2. `next build`
+
+Прод-миграции нужно запускать отдельным шагом (до или сразу после деплоя):
+
+```bash
+npm run deploy:migrate
+```
 
 Fallback (только для legacy БД, где миграции конфликтуют с уже созданными вручную таблицами):
 
