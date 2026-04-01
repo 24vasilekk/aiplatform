@@ -1,4 +1,4 @@
-import { getFinanceProductDashboard } from "@/lib/finance-product-analytics";
+import { getFinanceProductDashboard, type FinanceProductDashboard } from "@/lib/finance-product-analytics";
 
 function StatusCard({ label, value }: { label: string; value: number }) {
   return (
@@ -10,13 +10,45 @@ function StatusCard({ label, value }: { label: string; value: number }) {
 }
 
 export async function AdminFinanceProductDashboard({ days = 30 }: { days?: number }) {
-  const dashboard = await getFinanceProductDashboard(days);
+  const safeDays = Math.max(1, Math.min(Math.floor(days), 365));
+  let degradedMode = false;
+  let dashboard: FinanceProductDashboard = {
+    periodDays: safeDays,
+    revenueCents: 0,
+    paymentConversionPercent: 0,
+    activeStudents: 0,
+    dau: 0,
+    wau: 0,
+    retentionD1Percent: 0,
+    retentionD7Percent: 0,
+    paymentStatus: {
+      created: 0,
+      requires_action: 0,
+      processing: 0,
+      succeeded: 0,
+      failed: 0,
+      canceled: 0,
+      total: 0,
+    },
+    topCourses: [],
+  };
+
+  try {
+    dashboard = await getFinanceProductDashboard(safeDays);
+  } catch {
+    degradedMode = true;
+  }
 
   return (
     <section className="panel-accent space-y-3">
       <div>
         <h2>Финансы и продукт</h2>
         <p className="text-sm text-slate-700">Период: последние {dashboard.periodDays} дней (реальные данные БД).</p>
+        {degradedMode ? (
+          <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900">
+            Финансовая аналитика временно в fallback-режиме. Проверьте, что миграции БД применены.
+          </p>
+        ) : null}
       </div>
 
       <div className="grid gap-3 md:grid-cols-5">
@@ -93,4 +125,3 @@ export async function AdminFinanceProductDashboard({ days = 30 }: { days?: numbe
     </section>
   );
 }
-

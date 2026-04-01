@@ -8,6 +8,13 @@ import {
   listCustomTasksPaged,
   listUsersPaged,
   listPosts,
+  type CustomCourseRecord,
+  type CustomLessonRecord,
+  type CustomSectionRecord,
+  type CustomTaskRecord,
+  type PagedResult,
+  type PostRecord,
+  type UserRecord,
 } from "@/lib/db";
 import { listAllCourses } from "@/lib/course-catalog";
 
@@ -51,17 +58,55 @@ export default async function AdminPage() {
     );
   }
 
-  const customCourses = await listCustomCoursesPaged({ take: 500, skip: 0 });
-  const customSections = await listCustomSectionsPaged({ take: 700, skip: 0 });
-  const customLessons = await listCustomLessonsPaged({ take: 1_000, skip: 0 });
-  const customTasks = await listCustomTasksPaged({ take: 1_200, skip: 0 });
-  const users = await listUsersPaged({ role: "student", take: 300, skip: 0 });
-  const posts = await listPosts();
+  let degradedMode = false;
+
+  let customCourses: PagedResult<CustomCourseRecord> = { rows: [], total: 0, take: 500, skip: 0 };
+  let customSections: PagedResult<CustomSectionRecord> = { rows: [], total: 0, take: 700, skip: 0 };
+  let customLessons: PagedResult<CustomLessonRecord> = { rows: [], total: 0, take: 1_000, skip: 0 };
+  let customTasks: PagedResult<CustomTaskRecord> = { rows: [], total: 0, take: 1_200, skip: 0 };
+  let users: PagedResult<UserRecord> = { rows: [], total: 0, take: 300, skip: 0 };
+  let posts: PostRecord[] = [];
+
+  try {
+    customCourses = await listCustomCoursesPaged({ take: 500, skip: 0 });
+  } catch {
+    degradedMode = true;
+  }
+  try {
+    customSections = await listCustomSectionsPaged({ take: 700, skip: 0 });
+  } catch {
+    degradedMode = true;
+  }
+  try {
+    customLessons = await listCustomLessonsPaged({ take: 1_000, skip: 0 });
+  } catch {
+    degradedMode = true;
+  }
+  try {
+    customTasks = await listCustomTasksPaged({ take: 1_200, skip: 0 });
+  } catch {
+    degradedMode = true;
+  }
+  try {
+    users = await listUsersPaged({ role: "student", take: 300, skip: 0 });
+  } catch {
+    degradedMode = true;
+  }
+  try {
+    posts = await listPosts();
+  } catch {
+    degradedMode = true;
+  }
   const catalogCourses = await listAllCourses();
 
   return (
     <section className="space-y-4">
       <h1>Админ-панель (MVP)</h1>
+      {degradedMode ? (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          Часть admin-виджетов работает в fallback-режиме. Проверьте применение миграций БД.
+        </p>
+      ) : null}
       <AdminAnalyticsWidget />
       <AdminFinanceProductDashboard days={30} />
       <AdminPurchasesAnalytics

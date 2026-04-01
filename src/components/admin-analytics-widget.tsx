@@ -122,15 +122,70 @@ function DailySeriesTable({ rows }: { rows: DailyMetricAggregateRecord[] }) {
 }
 
 export async function AdminAnalyticsWidget() {
-  const [reg7, reg30, views7, views30, learn7, learn30, series30] = await Promise.all([
-    getRegistrationChannelStats(7),
-    getRegistrationChannelStats(30),
-    getBlogPostViewCount(7),
-    getBlogPostViewCount(30),
-    getLearningAnalyticsSnapshot(7),
-    getLearningAnalyticsSnapshot(30),
-    ensureDailyMetricAggregates(30),
-  ]);
+  let degradedMode = false;
+  const emptyRegistrations: RegistrationChannelStats = { total: 0, email: 0, google: 0, telegram: 0 };
+  const emptyLearning = (days: number): LearningAnalyticsSnapshotRecord => ({
+    periodDays: days,
+    registrations: 0,
+    activeUsers: 0,
+    dau: 0,
+    wau: 0,
+    lessonProgressUpdates: 0,
+    lessonCompletions: 0,
+    taskAttempts: 0,
+    taskCorrectAttempts: 0,
+    aiChatMessages: 0,
+    aiSolutionAnalyses: 0,
+    paymentSuccesses: 0,
+    revenueCents: 0,
+    paymentConversionPercent: 0,
+    retentionD1Percent: 0,
+    retentionD7Percent: 0,
+  });
+
+  let reg7 = emptyRegistrations;
+  let reg30 = emptyRegistrations;
+  let views7 = 0;
+  let views30 = 0;
+  let learn7 = emptyLearning(7);
+  let learn30 = emptyLearning(30);
+  let series30: DailyMetricAggregateRecord[] = [];
+
+  try {
+    reg7 = await getRegistrationChannelStats(7);
+  } catch {
+    degradedMode = true;
+  }
+  try {
+    reg30 = await getRegistrationChannelStats(30);
+  } catch {
+    degradedMode = true;
+  }
+  try {
+    views7 = await getBlogPostViewCount(7);
+  } catch {
+    degradedMode = true;
+  }
+  try {
+    views30 = await getBlogPostViewCount(30);
+  } catch {
+    degradedMode = true;
+  }
+  try {
+    learn7 = await getLearningAnalyticsSnapshot(7);
+  } catch {
+    degradedMode = true;
+  }
+  try {
+    learn30 = await getLearningAnalyticsSnapshot(30);
+  } catch {
+    degradedMode = true;
+  }
+  try {
+    series30 = await ensureDailyMetricAggregates(30);
+  } catch {
+    degradedMode = true;
+  }
 
   const periods: PeriodStats[] = [
     { label: "Последние 7 дней", registrations: reg7, blogViews: views7, learning: learn7 },
@@ -144,6 +199,11 @@ export async function AdminAnalyticsWidget() {
         <p className="text-sm text-slate-700">
           Каналы регистрации, воронка обучения, AI-активность и дневные продуктовые агрегаты.
         </p>
+        {degradedMode ? (
+          <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900">
+            Данные показаны частично: часть таблиц БД недоступна или миграции не применены.
+          </p>
+        ) : null}
       </div>
       <div className="grid gap-3 md:grid-cols-2">
         {periods.map((period) => (
