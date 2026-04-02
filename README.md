@@ -45,7 +45,9 @@ npm run dev
 Миграции применяются отдельным шагом деплоя:
 
 ```bash
+npm run env:check
 npm run deploy:migrate
+npm run schema:check
 ```
 
 Если у вас legacy БД (раньше жили только на `db push`) и миграции падают, временно используйте fallback-команду:
@@ -58,6 +60,8 @@ npm run deploy:migrate
 npm run prisma:migrate:baseline:part34
 ```
 
+Если схема временно несовместима с релизом, API отвечает `503` с кодом `SCHEMA_NOT_READY`, текущей/ожидаемой версиями и runbook-командами.
+
 ## Проверка качества
 
 ```bash
@@ -65,6 +69,31 @@ npm run lint
 npm test
 npm run build
 ```
+
+Smoke API checks (после `npm run start`):
+
+```bash
+npm run smoke:api
+```
+
+Проверка env readiness (перед релизом):
+
+```bash
+npm run env:check
+```
+
+## CI release-check
+
+Workflow: `.github/workflows/release-check.yml`
+
+Пайплайн блокирует merge/release при ошибках в:
+
+- `env:check`
+- `prisma migrate status`
+- `prisma migrate deploy`
+- `schema:check` (schema/code compatibility gate)
+- `lint`, `test`, `build`
+- smoke API checks (`/api/health`, `/api/readiness`)
 
 ## Релизные документы
 
@@ -97,9 +126,18 @@ npm run build
   - `MOCK_BILLING_AUTOCONFIRM=1` (демо)
 - SMTP: `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `SMTP_SECURE`
 - OCR/PDF: `PDF_OCR_MAX_PAGES`
+- Schema readiness / maintenance: `SCHEMA_VERSION`, `SCHEMA_READINESS_ENABLED`, `SCHEMA_READINESS_POLICY`, `SCHEMA_READINESS_CACHE_TTL_MS`, `APP_MAINTENANCE_MODE`
+- Env readiness gate: `ENV_READINESS_MODE`, `ENV_READINESS_ENFORCE`, `ENV_READINESS_ENABLED`
+- Alerts: `CRITICAL_ALERT_WEBHOOK_URL`
 
 ## Где хранятся данные
 
 - PostgreSQL: бизнес-данные, события, платежи, очередь задач
 - Файлы загрузок: `data/uploads`
 - Файлы датасетов: `data/dataset-files`
+
+## Backup и rollback (кратко)
+
+- Перед деплоем делайте backup БД (`pg_dump --format=custom`).
+- При rollback сначала откатывайте приложение, затем решайте вопрос rollback БД только через отдельное окно обслуживания.
+- Подробный сценарий: [docs/runbook-part-3-4.md](docs/runbook-part-3-4.md).

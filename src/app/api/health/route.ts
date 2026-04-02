@@ -5,6 +5,7 @@ export async function GET(request: Request) {
   return observeRequest({
     request,
     operation: "health.liveness",
+    schemaCheck: "skip",
     handler: async () => {
       const metrics = getServiceMetricsSnapshot();
       return NextResponse.json({

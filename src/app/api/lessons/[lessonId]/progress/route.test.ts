@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   requireUserMock: vi.fn(),
   saveLessonProgressMock: vi.fn(),
   createAnalyticsEventMock: vi.fn(),
+  syncCompletedCourseLoyaltyMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api-auth", () => ({
@@ -14,6 +15,10 @@ vi.mock("@/lib/api-auth", () => ({
 vi.mock("@/lib/db", () => ({
   saveLessonProgress: mocks.saveLessonProgressMock,
   createAnalyticsEvent: mocks.createAnalyticsEventMock,
+}));
+
+vi.mock("@/lib/loyalty", () => ({
+  syncCompletedCourseLoyalty: mocks.syncCompletedCourseLoyaltyMock,
 }));
 
 import { POST } from "@/app/api/lessons/[lessonId]/progress/route";
@@ -26,6 +31,7 @@ describe("POST /api/lessons/[lessonId]/progress", () => {
     });
     mocks.saveLessonProgressMock.mockResolvedValue(null);
     mocks.createAnalyticsEventMock.mockResolvedValue(null);
+    mocks.syncCompletedCourseLoyaltyMock.mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -69,6 +75,7 @@ describe("POST /api/lessons/[lessonId]/progress", () => {
         userId: "u1",
       }),
     );
+    expect(mocks.syncCompletedCourseLoyaltyMock).toHaveBeenCalledWith("u1");
   });
 
   it("returns auth error response as-is", async () => {
@@ -83,4 +90,3 @@ describe("POST /api/lessons/[lessonId]/progress", () => {
     expect(response.status).toBe(401);
   });
 });
-

@@ -22,8 +22,7 @@ const AdminAnalyticsWidget = dynamic(
   () => import("@/components/admin-analytics-widget").then((mod) => mod.AdminAnalyticsWidget),
 );
 const AdminFinanceProductDashboard = dynamic(
-  () =>
-    import("@/components/admin-finance-product-dashboard").then((mod) => mod.AdminFinanceProductDashboard),
+  () => import("@/components/admin-finance-product-dashboard").then((mod) => mod.AdminFinanceProductDashboard),
 );
 const AdminPurchasesAnalytics = dynamic(
   () => import("@/components/admin-purchases-analytics").then((mod) => mod.AdminPurchasesAnalytics),
@@ -33,6 +32,9 @@ const AdminErrorMonitor = dynamic(
 );
 const AdminWalletManager = dynamic(
   () => import("@/components/admin-wallet-manager").then((mod) => mod.AdminWalletManager),
+);
+const AdminLoyaltyManager = dynamic(
+  () => import("@/components/admin-loyalty-manager").then((mod) => mod.AdminLoyaltyManager),
 );
 const AdminCourseManager = dynamic(
   () => import("@/components/admin-course-manager").then((mod) => mod.AdminCourseManager),
@@ -60,43 +62,34 @@ export default async function AdminPage() {
 
   let degradedMode = false;
 
-  let customCourses: PagedResult<CustomCourseRecord> = { rows: [], total: 0, take: 500, skip: 0 };
-  let customSections: PagedResult<CustomSectionRecord> = { rows: [], total: 0, take: 700, skip: 0 };
-  let customLessons: PagedResult<CustomLessonRecord> = { rows: [], total: 0, take: 1_000, skip: 0 };
-  let customTasks: PagedResult<CustomTaskRecord> = { rows: [], total: 0, take: 1_200, skip: 0 };
-  let users: PagedResult<UserRecord> = { rows: [], total: 0, take: 300, skip: 0 };
+  let customCourses: PagedResult<CustomCourseRecord> = { rows: [], total: 0, take: 120, skip: 0 };
+  let customSections: PagedResult<CustomSectionRecord> = { rows: [], total: 0, take: 180, skip: 0 };
+  let customLessons: PagedResult<CustomLessonRecord> = { rows: [], total: 0, take: 240, skip: 0 };
+  let customTasks: PagedResult<CustomTaskRecord> = { rows: [], total: 0, take: 320, skip: 0 };
+  let users: PagedResult<UserRecord> = { rows: [], total: 0, take: 100, skip: 0 };
   let posts: PostRecord[] = [];
 
-  try {
-    customCourses = await listCustomCoursesPaged({ take: 500, skip: 0 });
-  } catch {
-    degradedMode = true;
-  }
-  try {
-    customSections = await listCustomSectionsPaged({ take: 700, skip: 0 });
-  } catch {
-    degradedMode = true;
-  }
-  try {
-    customLessons = await listCustomLessonsPaged({ take: 1_000, skip: 0 });
-  } catch {
-    degradedMode = true;
-  }
-  try {
-    customTasks = await listCustomTasksPaged({ take: 1_200, skip: 0 });
-  } catch {
-    degradedMode = true;
-  }
-  try {
-    users = await listUsersPaged({ role: "student", take: 300, skip: 0 });
-  } catch {
-    degradedMode = true;
-  }
-  try {
-    posts = await listPosts();
-  } catch {
-    degradedMode = true;
-  }
+  const settled = await Promise.allSettled([
+    listCustomCoursesPaged({ take: 120, skip: 0 }),
+    listCustomSectionsPaged({ take: 180, skip: 0 }),
+    listCustomLessonsPaged({ take: 240, skip: 0 }),
+    listCustomTasksPaged({ take: 320, skip: 0 }),
+    listUsersPaged({ take: 100, skip: 0 }),
+    listPosts(),
+  ] as const);
+
+  if (settled[0].status === "fulfilled") customCourses = settled[0].value;
+  else degradedMode = true;
+  if (settled[1].status === "fulfilled") customSections = settled[1].value;
+  else degradedMode = true;
+  if (settled[2].status === "fulfilled") customLessons = settled[2].value;
+  else degradedMode = true;
+  if (settled[3].status === "fulfilled") customTasks = settled[3].value;
+  else degradedMode = true;
+  if (settled[4].status === "fulfilled") users = settled[4].value;
+  else degradedMode = true;
+  if (settled[5].status === "fulfilled") posts = settled[5].value;
+  else degradedMode = true;
   const catalogCourses = await listAllCourses();
 
   return (
@@ -114,6 +107,7 @@ export default async function AdminPage() {
       />
       <AdminErrorMonitor />
       <AdminWalletManager />
+      <AdminLoyaltyManager />
       <AdminCourseManager
         initialCourses={customCourses.rows}
         initialSections={customSections.rows}

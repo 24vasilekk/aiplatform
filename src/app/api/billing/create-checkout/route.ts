@@ -17,6 +17,8 @@ const schema = z.object({
   email: z.email().optional(),
   provider: z.enum(["yookassa", "mock"]).optional(),
   idempotencyKey: z.string().trim().min(8).max(120).optional(),
+  applyLoyaltyDiscount: z.boolean().optional().default(false),
+  requestedLoyaltyPoints: z.number().int().positive().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -52,7 +54,7 @@ export async function POST(request: NextRequest) {
         return response;
       }
 
-      const { planId, email, provider, idempotencyKey } = parsed.data;
+      const { planId, email, provider, idempotencyKey, applyLoyaltyDiscount, requestedLoyaltyPoints } = parsed.data;
       const requestPath = new URL(request.url).pathname;
       const headerIdempotencyKey = request.headers.get("x-idempotency-key")?.trim() ?? "";
       const resolvedIdempotencyKey = idempotencyKey ?? (headerIdempotencyKey || null);
@@ -65,6 +67,8 @@ export async function POST(request: NextRequest) {
           email,
           idempotencyKey: resolvedIdempotencyKey,
           preferredProvider: provider ?? null,
+          applyLoyaltyDiscount,
+          requestedLoyaltyPoints: requestedLoyaltyPoints ?? null,
         });
       } catch {
         checkout = null;
@@ -155,6 +159,7 @@ export async function POST(request: NextRequest) {
       fallbackUsed: checkout.fallbackUsed,
       idempotencyKey: checkout.payment.idempotencyKey,
     },
+    loyalty: checkout.loyalty,
   });
 
       await createAnalyticsEvent({
@@ -167,6 +172,8 @@ export async function POST(request: NextRequest) {
       amountCents: checkout.payment.amountCents,
       status: checkout.finalStatus,
       fallbackUsed: checkout.fallbackUsed,
+      loyaltyDiscountCents: checkout.loyalty.discountCents,
+      loyaltyPointsSpent: checkout.loyalty.pointsSpent,
     },
   });
       if (checkout.finalStatus === "succeeded") {
@@ -178,6 +185,8 @@ export async function POST(request: NextRequest) {
         planId,
         provider: checkout.provider,
         amountCents: checkout.payment.amountCents,
+        loyaltyDiscountCents: checkout.loyalty.discountCents,
+        loyaltyPointsSpent: checkout.loyalty.pointsSpent,
       },
     });
       } else if (checkout.finalStatus === "failed") {

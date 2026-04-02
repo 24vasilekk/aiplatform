@@ -125,4 +125,23 @@ describe("POST /api/auth/login", () => {
       }),
     );
   });
+
+  it("supports builtin tutor login", async () => {
+    const request = new Request("http://localhost/api/auth/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "tutor@ege.local", password: "wwwwww" }),
+    });
+
+    const response = await POST(request);
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.user).toEqual({ id: "builtin-tutor", email: "tutor@ege.local", role: "tutor" });
+    expect(mocks.signAuthTokenMock).toHaveBeenCalledWith({
+      sub: "builtin-tutor",
+      email: "tutor@ege.local",
+      role: "tutor",
+    });
+  });
 });

@@ -1,5 +1,47 @@
 # Changelog: Часть 3 и 4
 
+## [2026-04-02] Stabilization & Release Gate
+
+### Added
+
+- env readiness gate:
+  - `npm run env:check` (CLI preflight для production env)
+  - расширенный `/api/readiness` с секцией `env` и флагом `enforce`
+- schema readiness layer (`expectedVersion/appliedVersion`, compatibility status, runbook hints)
+- maintenance mode:
+  - API `503` с кодами `SCHEMA_NOT_READY` / `MAINTENANCE_MODE`
+  - отдельная страница `/maintenance`
+- CI workflow `release-check`:
+  - `env:check`
+  - `prisma migrate status`
+  - `prisma migrate deploy`
+  - `schema:check`
+  - `lint/test/build`
+  - smoke API checks
+- новый `GET /api/admin/users/360` и расширенный User 360 UI (tabs/export/actions)
+- API быстрых админ-действий для выдачи доступа (`/api/admin/users/access`)
+
+### Changed
+
+- `/api/metrics` теперь публикует readiness gauges:
+  - `service_schema_readiness`
+  - `service_env_readiness`
+- `readiness` теперь отражает совместимость схемы и кода, а не только доступность БД
+- `api-auth` и request-observer получили единый schema gate
+- runbook и README дополнены release-check и schema readiness командами
+
+### Fixed
+
+- устранен build-blocker типизации в `tutor/lms/lessons/[lessonId]/files` (strict typed extensions)
+- закрыты lint-ошибки в dashboard/tutor/loyalty integration tests
+- добавлены недостающие тесты для readiness и admin access endpoints
+- устранен P0 runtime-crash в Edge middleware (разорвана зависимость `middleware -> auth -> db -> attachment-ai`)
+
+### Operational Notes
+
+- в sandbox-окружениях без разрешения на bind-порт локальный smoke (`npm run smoke:api` + `next start`) может быть недоступен; в CI выполняется штатно
+- перед прод-деплоем обязательно применить миграции `20260402011500...20260402133000`, иначе `/api/readiness` вернет `503 maintenance` (`schema_behind_code`)
+
 ## [2026-04-01] Final
 
 ### Added

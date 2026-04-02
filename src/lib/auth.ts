@@ -1,8 +1,7 @@
 import { cookies } from "next/headers";
 import { jwtVerify, SignJWT } from "jose";
 import { findUserById, type UserRole } from "@/lib/db";
-
-const AUTH_COOKIE = "ege_auth";
+import { AUTH_COOKIE, authCookieName } from "@/lib/auth-constants";
 
 type AuthPayload = {
   sub: string;
@@ -29,9 +28,7 @@ export async function verifyAuthToken(token: string) {
   return result.payload;
 }
 
-export function authCookieName() {
-  return AUTH_COOKIE;
-}
+export { authCookieName };
 
 export const DEMO_PAID_COOKIE = "ege_paid_all";
 export const DEMO_PAID_COURSES_COOKIE = "ege_paid_courses";
@@ -78,6 +75,18 @@ export async function getCurrentUser() {
         id: "builtin-admin",
         email: "admin@ege.local",
         role: "admin" as const,
+      };
+    }
+
+    if (
+      payload.sub === "builtin-tutor" &&
+      payload.email === "tutor@ege.local" &&
+      payload.role === "tutor"
+    ) {
+      return {
+        id: "builtin-tutor",
+        email: "tutor@ege.local",
+        role: "tutor" as const,
       };
     }
 

@@ -43,6 +43,7 @@ npm run build
 
 ```bash
 npm run deploy:migrate
+npm run schema:check
 ```
 
 Fallback (только для legacy БД, где миграции конфликтуют с уже созданными вручную таблицами):
@@ -64,6 +65,34 @@ npm run prisma:migrate:baseline:part34
 npm run build:vercel
 ```
 
+### 1.5 Schema readiness / maintenance mode
+
+Перед включением трафика на новый релиз:
+
+```bash
+npm run env:check
+npm run prisma:generate
+npm run prisma:migrate:deploy
+npm run schema:check
+```
+
+Если `schema:check` вернул несовместимость:
+
+1. включите maintenance mode:
+   - `APP_MAINTENANCE_MODE=1`
+2. примените миграции:
+   - `npm run prisma:migrate:deploy`
+3. перепроверьте:
+   - `npm run env:check`
+   - `npm run schema:check`
+4. выключите maintenance mode:
+   - `APP_MAINTENANCE_MODE=0`
+
+Fallback-поведение:
+
+- `SCHEMA_READINESS_POLICY=strict` (по умолчанию): при несовместимости API возвращает `503 SCHEMA_NOT_READY`, readiness = `maintenance`.
+- `SCHEMA_READINESS_POLICY=warn`: трафик не блокируется автоматически, readiness = `degraded`.
+
 ## 2. Обязательные env
 
 - `DATABASE_URL`
@@ -76,6 +105,14 @@ npm run build:vercel
 
 - `MOCK_BILLING_AUTOCONFIRM=1` (демо)
 - `PDF_OCR_MAX_PAGES`
+- `SCHEMA_VERSION` (закрепить ожидаемую миграцию вручную)
+- `SCHEMA_READINESS_ENABLED=1|0`
+- `SCHEMA_READINESS_POLICY=strict|warn`
+- `SCHEMA_READINESS_CACHE_TTL_MS` (по умолчанию 15000)
+- `APP_MAINTENANCE_MODE=1|0`
+- `ENV_READINESS_MODE=strict|warn`
+- `ENV_READINESS_ENFORCE=1|0`
+- `ENV_READINESS_ENABLED=1|0`
 - SMTP-переменные для восстановления пароля
 
 ## 3. Операционный цикл очередей
@@ -167,16 +204,40 @@ npm run build:vercel
 2. оставить БД без destructive rollback
 3. выключить ops-действия для ручного enqueue до стабилизации
 
-### 5.2 Частичное восстановление очереди
+### 5.2 Backup/restore БД
+
+Полный backup перед релизом:
+
+```bash
+export DATABASE_URL="postgresql://..."
+mkdir -p backups
+pg_dump --dbname="$DATABASE_URL" --format=custom --no-owner --file="backups/ege-$(date +%Y%m%d-%H%M%S).dump"
+```
+
+Проверка backup:
+
+```bash
+pg_restore --list "backups/<backup>.dump" >/dev/null
+```
+
+Restore в аварийном сценарии (в отдельную БД/окно обслуживания):
+
+```bash
+export TARGET_DATABASE_URL="postgresql://..."
+pg_restore --clean --if-exists --no-owner --dbname="$TARGET_DATABASE_URL" "backups/<backup>.dump"
+```
+
+### 5.3 Частичное восстановление очереди
 
 1. зафиксировать ошибку в `ServiceError`
 2. для критичных задач повторно enqueue с уникальным `idempotencyKey`
 3. запускать `run_pending` малыми батчами (`limit=1..3`)
 
-### 5.3 Проверка после восстановления
+### 5.4 Проверка после восстановления
 
 - `health` = ok
 - `readiness` = ready
+- `env:check` = ok
 - `npm test` локально/CI
 - smoke сценарии:
   - checkout + webhook
@@ -192,3 +253,34 @@ npm run build:vercel
 - `JobQueue` pending старше 15 минут > 20 задач
 - `JobQueue` failed > 5 задач за 10 минут
 - readiness != ready > 2 минуты
+
+Метрики и источники:
+
+- `/api/metrics?format=prom`
+- gauge `service_schema_readiness` (`1=ready`, `0.5=degraded`, `0=maintenance/not_ready`)
+- gauge `service_env_readiness` (`1=ok`, `0=not_ok`)
+- критичные серверные ошибки отправляются через `CRITICAL_ALERT_WEBHOOK_URL`
+
+Рекомендуемые алерты:
+
+1. `service_request_errors_total` (5xx) растет > 2% за 5 минут.
+2. `service_schema_readiness < 1` более 2 минут.
+3. `service_env_readiness == 0` более 1 минуты.
+4. `JobQueue` pending/failed по порогам из раздела 6.
+
+## 7. CI release-check
+
+Workflow: `.github/workflows/release-check.yml`
+
+Порядок проверок в CI:
+
+1. `npx prisma migrate status`
+2. `npm run prisma:migrate:deploy`
+3. `npm run env:check`
+4. `npm run schema:check`
+5. `npm run lint`
+6. `npm test`
+7. `npm run build`
+8. `npm run smoke:api` (после `npm run start`)
+
+Если любой шаг падает, релиз блокируется до исправления.

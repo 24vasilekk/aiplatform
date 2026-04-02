@@ -9,10 +9,16 @@ import {
   markPaymentFailed,
   markPaymentProcessing,
   markPaymentSucceeded,
+  updatePaymentMetadata,
   updatePaymentProviderReference,
   type PaymentIntentRecord,
 } from "@/lib/db";
 import { listAllCourses } from "@/lib/course-catalog";
+import {
+  getLoyaltyDiscountQuote,
+  redeemLoyaltyDiscount,
+  rollbackLoyaltyRedemption,
+} from "@/lib/loyalty";
 
 export type PlanId = "math_only" | "bundle_2" | "all_access";
 export type BillingProvider = "mock" | "yookassa";
@@ -30,6 +36,11 @@ type CheckoutResult = {
   provider: BillingProvider;
   checkoutUrl: string | null;
   fallbackUsed: boolean;
+  loyalty: {
+    applied: boolean;
+    discountCents: number;
+    pointsSpent: number;
+  };
 };
 
 type YooKassaCreatePaymentResponse = {
@@ -46,6 +57,15 @@ type WebhookResult = {
   ok: boolean;
   deduplicated: boolean;
   payment: PaymentIntentRecord | null;
+};
+
+type PaymentLoyaltyMetadata = {
+  applied: boolean;
+  discountCents: number;
+  pointsSpent: number;
+  requestedPoints: number | null;
+  redemptionTransactionId: string | null;
+  rollbackTransactionId: string | null;
 };
 
 function getAppUrl() {
@@ -107,12 +127,89 @@ function buildPaymentMetadata(input: {
   checkoutUrl?: string | null;
   email?: string;
   providerPayload?: unknown;
+  loyalty?: Partial<PaymentLoyaltyMetadata> | null;
+  baseAmountCents?: number;
 }) {
   const current = parsePaymentMetadata(input.previous ?? null);
   if (input.email) current.email = input.email;
   if (typeof input.checkoutUrl === "string") current.checkoutUrl = input.checkoutUrl;
   if (input.providerPayload !== undefined) current.providerPayload = input.providerPayload;
+  if (typeof input.baseAmountCents === "number") current.baseAmountCents = Math.max(0, Math.floor(input.baseAmountCents));
+  if (input.loyalty) {
+    const existing = getPaymentLoyaltyMetadata(input.previous ?? null);
+    current.loyalty = {
+      ...existing,
+      ...input.loyalty,
+    } satisfies PaymentLoyaltyMetadata;
+  }
   return JSON.stringify(current);
+}
+
+function getPaymentLoyaltyMetadata(metadata: string | null): PaymentLoyaltyMetadata {
+  const parsed = parsePaymentMetadata(metadata);
+  if (!parsed.loyalty || typeof parsed.loyalty !== "object" || Array.isArray(parsed.loyalty)) {
+    return {
+      applied: false,
+      discountCents: 0,
+      pointsSpent: 0,
+      requestedPoints: null,
+      redemptionTransactionId: null,
+      rollbackTransactionId: null,
+    };
+  }
+
+  const loyalty = parsed.loyalty as Record<string, unknown>;
+  return {
+    applied: Boolean(loyalty.applied),
+    discountCents: Math.max(0, Math.floor(Number(loyalty.discountCents) || 0)),
+    pointsSpent: Math.max(0, Math.floor(Number(loyalty.pointsSpent) || 0)),
+    requestedPoints:
+      loyalty.requestedPoints === null || loyalty.requestedPoints === undefined
+        ? null
+        : Math.max(0, Math.floor(Number(loyalty.requestedPoints) || 0)),
+    redemptionTransactionId: typeof loyalty.redemptionTransactionId === "string" ? loyalty.redemptionTransactionId : null,
+    rollbackTransactionId: typeof loyalty.rollbackTransactionId === "string" ? loyalty.rollbackTransactionId : null,
+  };
+}
+
+function getBaseAmountFromMetadata(payment: PaymentIntentRecord) {
+  const parsed = parsePaymentMetadata(payment.metadata);
+  if (typeof parsed.baseAmountCents === "number" && Number.isFinite(parsed.baseAmountCents)) {
+    return Math.max(0, Math.floor(parsed.baseAmountCents));
+  }
+  return payment.amountCents;
+}
+
+async function maybeRollbackLoyaltyRedemption(input: {
+  payment: PaymentIntentRecord;
+  status: PaymentIntentRecord["status"];
+  reason: string;
+}) {
+  const loyalty = getPaymentLoyaltyMetadata(input.payment.metadata);
+  if (!loyalty.applied || !loyalty.redemptionTransactionId || loyalty.rollbackTransactionId) {
+    return null;
+  }
+
+  const rollback = await rollbackLoyaltyRedemption({
+    userId: input.payment.userId,
+    redemptionTransactionId: loyalty.redemptionTransactionId,
+    idempotencyKey: `checkout_loyalty_rollback:${input.payment.checkoutToken}`,
+    reason: `${input.status}:${input.reason}`,
+  });
+
+  if (!rollback?.transactionId) return rollback;
+
+  const metadata = buildPaymentMetadata({
+    previous: input.payment.metadata,
+    loyalty: {
+      rollbackTransactionId: rollback.transactionId,
+    },
+  });
+  await updatePaymentMetadata({
+    checkoutToken: input.payment.checkoutToken,
+    metadata,
+  });
+  return rollback;
 }
 
 async function createYooKassaPayment(input: {
@@ -174,25 +271,86 @@ export async function createCheckout(input: {
   email?: string;
   idempotencyKey?: string | null;
   preferredProvider?: string | null;
+  applyLoyaltyDiscount?: boolean;
+  requestedLoyaltyPoints?: number | null;
 }): Promise<CheckoutResult> {
   const provider = getBillingProvider(input.preferredProvider);
   const planCourseIds = await resolvePlanCourseIds(input.planId);
   const normalizedIdempotencyKey = input.idempotencyKey?.trim() || null;
+  const baseAmountCents = PLAN_PRICES[input.planId];
+  const loyaltyQuote = input.applyLoyaltyDiscount
+    ? await getLoyaltyDiscountQuote({
+        userId: input.userId,
+        orderAmountCents: baseAmountCents,
+        requestedPoints: input.requestedLoyaltyPoints ?? null,
+      })
+    : null;
+  const loyaltyApplied = Boolean(loyaltyQuote && loyaltyQuote.discountCents > 0 && loyaltyQuote.pointsToSpend > 0);
+  const chargeAmountCents = loyaltyApplied ? loyaltyQuote!.finalAmountCents : baseAmountCents;
 
   const payment = await createPaymentIntent({
     userId: input.userId,
     planId: input.planId,
-    amountCents: PLAN_PRICES[input.planId],
+    amountCents: chargeAmountCents,
     currency: "RUB",
     provider,
     idempotencyKey: normalizedIdempotencyKey,
     metadata: buildPaymentMetadata({
       email: input.email,
+      baseAmountCents,
+      loyalty: {
+        applied: loyaltyApplied,
+        discountCents: loyaltyQuote?.discountCents ?? 0,
+        pointsSpent: loyaltyQuote?.pointsToSpend ?? 0,
+        requestedPoints: loyaltyQuote?.requestedPoints ?? null,
+      },
     }),
     status: provider === "mock" ? "created" : "requires_action",
   });
 
   const cachedMetadata = parsePaymentMetadata(payment.metadata);
+  const paymentLoyalty = getPaymentLoyaltyMetadata(payment.metadata);
+  let loyaltyState = paymentLoyalty;
+  if (
+    paymentLoyalty.applied &&
+    !paymentLoyalty.redemptionTransactionId &&
+    paymentLoyalty.pointsSpent > 0 &&
+    payment.status !== "succeeded" &&
+    payment.status !== "failed" &&
+    payment.status !== "canceled"
+  ) {
+    const redemption = await redeemLoyaltyDiscount({
+      userId: payment.userId,
+      orderAmountCents: getBaseAmountFromMetadata(payment),
+      requestedPoints: paymentLoyalty.requestedPoints,
+      paymentIntentId: payment.id,
+      planId: payment.planId as PlanId,
+      idempotencyKey: `checkout_loyalty_redeem:${payment.checkoutToken}`,
+    });
+    if (redemption) {
+      const updatedMetadata = buildPaymentMetadata({
+        previous: payment.metadata,
+        loyalty: {
+          applied: true,
+          discountCents: redemption.discountCents,
+          pointsSpent: redemption.pointsSpent,
+          redemptionTransactionId: redemption.transactionId,
+        },
+      });
+      await updatePaymentMetadata({
+        checkoutToken: payment.checkoutToken,
+        metadata: updatedMetadata,
+      });
+      loyaltyState = {
+        ...paymentLoyalty,
+        applied: true,
+        discountCents: redemption.discountCents,
+        pointsSpent: redemption.pointsSpent,
+        redemptionTransactionId: redemption.transactionId,
+      };
+    }
+  }
+
   if (
     normalizedIdempotencyKey &&
     payment.idempotencyKey === normalizedIdempotencyKey &&
@@ -206,6 +364,11 @@ export async function createCheckout(input: {
       provider: payment.provider === "yookassa" ? "yookassa" : "mock",
       checkoutUrl: cachedMetadata.checkoutUrl,
       fallbackUsed: payment.provider !== provider,
+      loyalty: {
+        applied: loyaltyState.applied,
+        discountCents: loyaltyState.discountCents,
+        pointsSpent: loyaltyState.pointsSpent,
+      },
     };
   }
 
@@ -221,6 +384,11 @@ export async function createCheckout(input: {
         provider: "mock",
         checkoutUrl: `${getAppUrl()}/pricing?mockPayment=${updated.checkoutToken}`,
         fallbackUsed: false,
+        loyalty: {
+          applied: loyaltyState.applied,
+          discountCents: loyaltyState.discountCents,
+          pointsSpent: loyaltyState.pointsSpent,
+        },
       };
     }
 
@@ -232,6 +400,11 @@ export async function createCheckout(input: {
       provider: "mock",
       checkoutUrl: `${getAppUrl()}/pricing?mockPayment=${pending.checkoutToken}`,
       fallbackUsed: false,
+      loyalty: {
+        applied: loyaltyState.applied,
+        discountCents: loyaltyState.discountCents,
+        pointsSpent: loyaltyState.pointsSpent,
+      },
     };
   }
 
@@ -264,6 +437,11 @@ export async function createCheckout(input: {
       await applySuccessAccess(payment.userId, input.planId);
     } else if (mappedStatus === "canceled") {
       updated = await markPaymentCanceled(payment.checkoutToken, yookassa.cancellation_details?.reason);
+      await maybeRollbackLoyaltyRedemption({
+        payment: updated,
+        status: "canceled",
+        reason: yookassa.cancellation_details?.reason ?? "create_payment_canceled",
+      });
     } else if (mappedStatus === "processing") {
       updated = await markPaymentProcessing(payment.checkoutToken);
     }
@@ -275,6 +453,11 @@ export async function createCheckout(input: {
       provider: "yookassa",
       checkoutUrl,
       fallbackUsed: false,
+      loyalty: {
+        applied: loyaltyState.applied,
+        discountCents: loyaltyState.discountCents,
+        pointsSpent: loyaltyState.pointsSpent,
+      },
     };
   } catch {
     await updatePaymentProviderReference({
@@ -298,6 +481,11 @@ export async function createCheckout(input: {
         provider: "mock",
         checkoutUrl: `${getAppUrl()}/pricing?mockPayment=${payment.checkoutToken}`,
         fallbackUsed: true,
+        loyalty: {
+          applied: loyaltyState.applied,
+          discountCents: loyaltyState.discountCents,
+          pointsSpent: loyaltyState.pointsSpent,
+        },
       };
     }
 
@@ -309,6 +497,11 @@ export async function createCheckout(input: {
       provider: "mock",
       checkoutUrl: `${getAppUrl()}/pricing?mockPayment=${payment.checkoutToken}`,
       fallbackUsed: true,
+      loyalty: {
+        applied: loyaltyState.applied,
+        discountCents: loyaltyState.discountCents,
+        pointsSpent: loyaltyState.pointsSpent,
+      },
     };
   }
 }
@@ -426,8 +619,18 @@ export async function applyYooKassaWebhook(payload: unknown): Promise<WebhookRes
       payment.checkoutToken,
       object.cancellation_details?.reason ?? object.canceled_at ?? "canceled_by_provider",
     );
+    await maybeRollbackLoyaltyRedemption({
+      payment: updated,
+      status: "canceled",
+      reason: object.cancellation_details?.reason ?? "canceled_by_provider",
+    });
   } else {
     updated = await markPaymentFailed(payment.checkoutToken, "failed_by_provider");
+    await maybeRollbackLoyaltyRedemption({
+      payment: updated,
+      status: "failed",
+      reason: "failed_by_provider",
+    });
   }
 
   return { ok: true, deduplicated: false, payment: updated };

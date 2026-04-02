@@ -15,6 +15,9 @@ const mocks = vi.hoisted(() => ({
   rateLimitByRequestMock: vi.fn(),
   hasJsonContentTypeMock: vi.fn(),
   resolvePlanCourseIdsMock: vi.fn(),
+  getLoyaltyDiscountQuoteMock: vi.fn(),
+  redeemLoyaltyDiscountMock: vi.fn(),
+  rollbackLoyaltyRedemptionMock: vi.fn(),
 }));
 
 vi.mock("@/lib/api-auth", () => ({
@@ -44,6 +47,12 @@ vi.mock("@/lib/billing", () => ({
 
 vi.mock("@/lib/observability", () => ({
   observeRequest: mocks.observeRequestMock,
+}));
+
+vi.mock("@/lib/loyalty", () => ({
+  getLoyaltyDiscountQuote: mocks.getLoyaltyDiscountQuoteMock,
+  redeemLoyaltyDiscount: mocks.redeemLoyaltyDiscountMock,
+  rollbackLoyaltyRedemption: mocks.rollbackLoyaltyRedemptionMock,
 }));
 
 vi.mock("@/lib/security", () => ({
@@ -83,6 +92,19 @@ describe("POST /api/billing/pay-with-wallet", () => {
     mocks.createPaymentEventMock.mockResolvedValue(null);
     mocks.createAnalyticsEventMock.mockResolvedValue(null);
     mocks.grantCourseAccessMock.mockResolvedValue(null);
+    mocks.getLoyaltyDiscountQuoteMock.mockResolvedValue({
+      orderAmountCents: 490000,
+      availablePoints: 0,
+      maxDiscountCents: 0,
+      discountCents: 0,
+      pointsToSpend: 0,
+      finalAmountCents: 490000,
+      reason: "NO_POINTS_AVAILABLE",
+      requestedPoints: null,
+      rules: {},
+    });
+    mocks.redeemLoyaltyDiscountMock.mockResolvedValue(null);
+    mocks.rollbackLoyaltyRedemptionMock.mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -145,5 +167,49 @@ describe("POST /api/billing/pay-with-wallet", () => {
     expect(data.ok).toBe(true);
     expect(mocks.grantCourseAccessMock).toHaveBeenCalledWith("u1", "math-ege-2026", "subscription");
     expect(mocks.createPaymentEventMock).toHaveBeenCalled();
+  });
+
+  it("applies loyalty discount when requested", async () => {
+    mocks.getLoyaltyDiscountQuoteMock.mockResolvedValue({
+      orderAmountCents: 490000,
+      availablePoints: 20000,
+      maxDiscountCents: 147000,
+      discountCents: 10000,
+      pointsToSpend: 10000,
+      finalAmountCents: 480000,
+      reason: null,
+      requestedPoints: 10000,
+      rules: {},
+    });
+    mocks.redeemLoyaltyDiscountMock.mockResolvedValue({
+      transactionId: "ltx_1",
+      pointsSpent: 10000,
+      discountCents: 10000,
+      balanceAfter: 10000,
+      deduplicated: false,
+    });
+    mocks.debitWalletForPurchaseMock.mockResolvedValue({ ok: true });
+    mocks.markPaymentSucceededMock.mockResolvedValue({
+      id: "pi_1",
+      checkoutToken: "ct_1",
+      status: "succeeded",
+      amountCents: 480000,
+      currency: "RUB",
+      provider: "wallet",
+      idempotencyKey: "idem_1",
+    });
+
+    const response = await POST(
+      new Request("http://localhost/api/billing/pay-with-wallet", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ planId: "math_only", applyLoyaltyDiscount: true, requestedLoyaltyPoints: 10000 }),
+      }) as never,
+    );
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data.loyalty.applied).toBe(true);
+    expect(mocks.redeemLoyaltyDiscountMock).toHaveBeenCalled();
   });
 });

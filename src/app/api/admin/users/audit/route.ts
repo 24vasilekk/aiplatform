@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireUser } from "@/lib/api-auth";
+import { requireAdmin } from "@/lib/api-auth";
 import {
   findUserById,
+  getWalletSnapshot,
   listAiSolutionAnalyses,
   listAnalyticsEvents,
   listCourseAccess,
@@ -67,13 +68,9 @@ function normalizeQuery(value: string | null) {
 }
 
 export async function GET(request: NextRequest) {
-  const auth = await requireUser(request);
+  const auth = await requireAdmin(request);
   if (auth.error || !auth.user) {
     return auth.error;
-  }
-
-  if (auth.user.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const params = request.nextUrl.searchParams;
@@ -84,12 +81,12 @@ export async function GET(request: NextRequest) {
   const eventName = parseEventName(params.get("eventName"));
   const eventsTake = parseTake(params.get("eventsTake"), 50, 200);
   const paymentsTake = parseTake(params.get("paymentsTake"), 50, 200);
+  const walletTake = parseTake(params.get("walletTake"), 50, 200);
   const aiTake = parseTake(params.get("aiTake"), 30, 100);
   const usersTake = parseTake(params.get("usersTake"), 100, 200);
   const usersSkip = parseSkip(params.get("usersSkip"), 0, 10_000);
 
   const pagedUsers = await listUsersPaged({
-    role: "student",
     query: query || undefined,
     take: usersTake,
     skip: usersSkip,
@@ -118,7 +115,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  const [payments, accesses, progress, aiAnalyses, activityEvents, courses] = await Promise.all([
+  const [payments, accesses, progress, aiAnalyses, activityEvents, courses, walletSnapshot] = await Promise.all([
     listAdminPayments({
       userId: selectedUser.id,
       sortBy: "createdAt",
@@ -136,6 +133,7 @@ export async function GET(request: NextRequest) {
       take: eventsTake,
     }),
     listAllCourses(),
+    getWalletSnapshot(selectedUser.id, walletTake),
   ]);
 
   const courseTitleById = new Map(courses.map((course) => [course.id, course.title] as const));
@@ -165,6 +163,13 @@ export async function GET(request: NextRequest) {
       aiAnalyses: {
         items: aiAnalyses,
         total: aiAnalyses.length,
+      },
+      wallet: {
+        wallet: walletSnapshot.wallet,
+        transactions: {
+          items: walletSnapshot.transactions,
+          total: walletSnapshot.totalTransactions,
+        },
       },
       activityEvents: {
         items: activityEvents.rows,

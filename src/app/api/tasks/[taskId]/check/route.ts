@@ -3,6 +3,7 @@ import { z } from "zod";
 import { lessons } from "@/lib/mvp-data";
 import { createAnalyticsEvent, findCustomTaskById, saveTaskAttempt } from "@/lib/db";
 import { requireUser } from "@/lib/api-auth";
+import { syncCompletedCourseLoyalty } from "@/lib/loyalty";
 
 const schema = z.object({
   answer: z.string().trim().min(1),
@@ -61,6 +62,7 @@ export async function POST(
         isCorrect,
       },
     });
+    await syncCompletedCourseLoyalty(auth.user.id);
   } catch {
     // Allow response even if persistence is unavailable (e.g., read-only serverless fs).
   }

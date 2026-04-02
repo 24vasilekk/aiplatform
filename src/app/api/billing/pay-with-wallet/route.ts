@@ -15,12 +15,19 @@ import {
   markPaymentFailed,
   markPaymentSucceeded,
 } from "@/lib/db";
+import {
+  getLoyaltyDiscountQuote,
+  redeemLoyaltyDiscount,
+  rollbackLoyaltyRedemption,
+} from "@/lib/loyalty";
 import { observeRequest } from "@/lib/observability";
 import { applyRateLimitHeaders, createRateLimitResponse, hasJsonContentType, rateLimitByRequest } from "@/lib/security";
 
 const schema = z.object({
   planId: z.enum(["math_only", "bundle_2", "all_access"]).default("all_access"),
   idempotencyKey: z.string().trim().min(8).max(120).optional(),
+  requestedLoyaltyPoints: z.number().int().positive().optional(),
+  applyLoyaltyDiscount: z.boolean().optional().default(false),
 });
 
 function setPaidCookies(response: NextResponse, planId: PlanId, courseIds: string[]) {
@@ -97,36 +104,52 @@ export async function POST(request: NextRequest) {
       }
 
       const { planId } = parsed.data;
+      const baseAmountCents = PLAN_PRICES[planId];
       const requestPath = new URL(request.url).pathname;
       const headerIdempotencyKey = request.headers.get("x-idempotency-key")?.trim() ?? "";
       const resolvedIdempotencyKey =
         parsed.data.idempotencyKey ??
         (headerIdempotencyKey || `wallet_purchase_${auth.user.id}_${crypto.randomUUID()}`);
 
+      const discountQuote = parsed.data.applyLoyaltyDiscount
+        ? await getLoyaltyDiscountQuote({
+            userId: auth.user.id,
+            orderAmountCents: baseAmountCents,
+            requestedPoints: parsed.data.requestedLoyaltyPoints ?? null,
+          })
+        : null;
+      const amountToChargeCents = discountQuote?.finalAmountCents ?? baseAmountCents;
+
       const payment = await createPaymentIntent({
-    userId: auth.user.id,
-    planId,
-    amountCents: PLAN_PRICES[planId],
-    currency: "RUB",
-    provider: "wallet",
-    status: "created",
-    idempotencyKey: resolvedIdempotencyKey,
-    metadata: JSON.stringify({ source: "wallet_purchase", planId }),
-  });
+        userId: auth.user.id,
+        planId,
+        amountCents: amountToChargeCents,
+        currency: "RUB",
+        provider: "wallet",
+        status: "created",
+        idempotencyKey: resolvedIdempotencyKey,
+        metadata: JSON.stringify({
+          source: "wallet_purchase",
+          planId,
+          baseAmountCents,
+          loyaltyDiscountCents: discountQuote?.discountCents ?? 0,
+          loyaltyPointsPlanned: discountQuote?.pointsToSpend ?? 0,
+        }),
+      });
 
       if (payment.status === "succeeded") {
         const planCourseIds = await resolvePlanCourseIds(planId);
         const response = NextResponse.json({
-      ok: true,
-      message: "Покупка уже подтверждена ранее.",
-      payment: {
-        id: payment.id,
-        checkoutToken: payment.checkoutToken,
-        status: payment.status,
-        amountCents: payment.amountCents,
-        currency: payment.currency,
-        provider: payment.provider,
-      },
+          ok: true,
+          message: "Покупка уже подтверждена ранее.",
+          payment: {
+            id: payment.id,
+            checkoutToken: payment.checkoutToken,
+            status: payment.status,
+            amountCents: payment.amountCents,
+            currency: payment.currency,
+            provider: payment.provider,
+          },
         });
         setPaidCookies(response, planId, planCourseIds);
         applyRateLimitHeaders(response, rateLimit);
@@ -134,20 +157,43 @@ export async function POST(request: NextRequest) {
       }
 
       const planCourseIds = await resolvePlanCourseIds(planId);
+      const shouldApplyDiscount = (discountQuote?.pointsToSpend ?? 0) > 0;
+      const loyaltyRedemption = shouldApplyDiscount
+        ? await redeemLoyaltyDiscount({
+            userId: auth.user.id,
+            orderAmountCents: baseAmountCents,
+            requestedPoints: parsed.data.requestedLoyaltyPoints ?? null,
+            paymentIntentId: payment.id,
+            planId,
+            idempotencyKey: `wallet_loyalty_redeem:${resolvedIdempotencyKey}`,
+          })
+        : null;
 
       try {
         await debitWalletForPurchase({
-      userId: auth.user.id,
-      amountCents: payment.amountCents,
-      paymentIntentId: payment.id,
-      idempotencyKey: `wallet_debit_${resolvedIdempotencyKey}`,
-      metadata: {
-        planId,
-        paymentId: payment.id,
-      },
-    });
+          userId: auth.user.id,
+          amountCents: payment.amountCents,
+          paymentIntentId: payment.id,
+          idempotencyKey: `wallet_debit_${resolvedIdempotencyKey}`,
+          metadata: {
+            planId,
+            paymentId: payment.id,
+            baseAmountCents,
+            loyaltyDiscountCents: loyaltyRedemption?.discountCents ?? 0,
+            loyaltyPointsSpent: loyaltyRedemption?.pointsSpent ?? 0,
+          },
+        });
       } catch (error) {
         if (isInsufficientFundsError(error)) {
+          if (loyaltyRedemption) {
+            await rollbackLoyaltyRedemption({
+              userId: auth.user.id,
+              redemptionTransactionId: loyaltyRedemption.transactionId,
+              idempotencyKey: `wallet_loyalty_rollback:${resolvedIdempotencyKey}`,
+              reason: "INSUFFICIENT_FUNDS",
+            });
+          }
+
           const failed = await markPaymentFailed(payment.checkoutToken, "INSUFFICIENT_FUNDS");
           const wallet = await getWalletByUserId(auth.user.id);
           const response = NextResponse.json(
@@ -180,7 +226,10 @@ export async function POST(request: NextRequest) {
         status: "succeeded",
         payload: {
           planId,
+          baseAmountCents,
           amountCents: succeeded.amountCents,
+          loyaltyDiscountCents: loyaltyRedemption?.discountCents ?? 0,
+          loyaltyPointsSpent: loyaltyRedemption?.pointsSpent ?? 0,
         },
       });
 
@@ -193,6 +242,8 @@ export async function POST(request: NextRequest) {
           provider: "wallet",
           amountCents: succeeded.amountCents,
           status: "succeeded",
+          loyaltyDiscountCents: loyaltyRedemption?.discountCents ?? 0,
+          loyaltyPointsSpent: loyaltyRedemption?.pointsSpent ?? 0,
         },
       });
       await createAnalyticsEvent({
@@ -203,6 +254,8 @@ export async function POST(request: NextRequest) {
           planId,
           provider: "wallet",
           amountCents: succeeded.amountCents,
+          loyaltyDiscountCents: loyaltyRedemption?.discountCents ?? 0,
+          loyaltyPointsSpent: loyaltyRedemption?.pointsSpent ?? 0,
         },
       });
 
@@ -217,6 +270,11 @@ export async function POST(request: NextRequest) {
           currency: succeeded.currency,
           provider: succeeded.provider,
           idempotencyKey: succeeded.idempotencyKey,
+        },
+        loyalty: {
+          applied: Boolean(loyaltyRedemption),
+          discountCents: loyaltyRedemption?.discountCents ?? 0,
+          pointsSpent: loyaltyRedemption?.pointsSpent ?? 0,
         },
       });
       setPaidCookies(response, planId, planCourseIds);

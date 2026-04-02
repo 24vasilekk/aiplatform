@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import { ensureTraceHeaders } from "@/lib/request-trace";
+import {
+  createSchemaMaintenanceApiResponse,
+  getSchemaReadinessSnapshot,
+  shouldServeMaintenance,
+} from "@/lib/schema-readiness";
 
 type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -18,6 +23,7 @@ type ObserveParams<T extends Response> = {
   request: Request;
   operation: string;
   handler: (ctx: RequestContext) => Promise<T>;
+  schemaCheck?: "enforce" | "skip";
 };
 
 type RequestMetricState = {
@@ -201,7 +207,12 @@ function sanitizeError(error: unknown) {
   return { message: String(error) };
 }
 
-export async function observeRequest<T extends Response>({ request, operation, handler }: ObserveParams<T>) {
+export async function observeRequest<T extends Response>({
+  request,
+  operation,
+  handler,
+  schemaCheck = "enforce",
+}: ObserveParams<T>) {
   const ctx = toRequestContext(request);
   const startedAt = Date.now();
   recordRequestStart(ctx.method);
@@ -218,6 +229,32 @@ export async function observeRequest<T extends Response>({ request, operation, h
   });
 
   try {
+    if (operation !== "health.readiness" && operation !== "health.liveness") {
+      if (schemaCheck === "enforce") {
+        const snapshot = await getSchemaReadinessSnapshot();
+        if (shouldServeMaintenance(snapshot, ctx.path)) {
+          const maintenanceResponse = createSchemaMaintenanceApiResponse(snapshot);
+          const durationMs = Date.now() - startedAt;
+          recordRequestEnd(maintenanceResponse.status, durationMs);
+          log("warn", "request.blocked.schema_maintenance", {
+            operation,
+            requestId: ctx.requestId,
+            correlationId: ctx.correlationId,
+            traceId: ctx.traceId,
+            spanId: ctx.spanId,
+            method: ctx.method,
+            path: ctx.path,
+            status: maintenanceResponse.status,
+            durationMs,
+            schemaStatus: snapshot.status,
+            schemaCompatibility: snapshot.compatibility,
+            schemaReasons: snapshot.reasons,
+          });
+          return attachTraceHeaders(maintenanceResponse, ctx) as T;
+        }
+      }
+    }
+
     const response = await handler(ctx);
     const durationMs = Date.now() - startedAt;
     recordRequestEnd(response.status, durationMs);

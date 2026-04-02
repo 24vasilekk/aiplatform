@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { requireUser } from "@/lib/api-auth";
+import { requireTutorOrAdmin } from "@/lib/api-auth";
 import { createTutorListing, listTutorListings } from "@/lib/tutor-market";
 import { createAdminAuditLog } from "@/lib/db";
+import { applyRateLimitHeaders, createRateLimitResponse, hasJsonContentType, rateLimitByRequest } from "@/lib/security";
 
 const schema = z.object({
   name: z.string().trim().min(2),
@@ -15,36 +16,59 @@ const schema = z.object({
 });
 
 export async function GET(request: NextRequest) {
-  const auth = await requireUser(request);
+  const auth = await requireTutorOrAdmin(request);
   if (auth.error || !auth.user) {
     return auth.error;
   }
-  if (auth.user.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const rateLimit = rateLimitByRequest({
+    request,
+    namespace: "admin_tutors_get",
+    keySuffix: auth.user.id,
+    limit: 220,
+    windowMs: 60_000,
+  });
+  if (!rateLimit.ok) {
+    return createRateLimitResponse(rateLimit, "Слишком много запросов списка репетиторов. Попробуйте позже.");
   }
 
   const tutors = await listTutorListings();
-  return NextResponse.json({ tutors });
+  const response = NextResponse.json({ tutors });
+  applyRateLimitHeaders(response, rateLimit);
+  return response;
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireUser(request);
+  const auth = await requireTutorOrAdmin(request);
   if (auth.error || !auth.user) {
     return auth.error;
   }
-  if (auth.user.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const rateLimit = rateLimitByRequest({
+    request,
+    namespace: "admin_tutors_post",
+    keySuffix: auth.user.id,
+    limit: 80,
+    windowMs: 60_000,
+  });
+  if (!rateLimit.ok) {
+    return createRateLimitResponse(rateLimit, "Слишком много операций создания анкеты репетитора. Попробуйте позже.");
+  }
+  if (!hasJsonContentType(request)) {
+    const response = NextResponse.json({ error: "Expected application/json" }, { status: 415 });
+    applyRateLimitHeaders(response, rateLimit);
+    return response;
   }
 
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: "Неверные данные объявления" }, { status: 400 });
+    const response = NextResponse.json({ error: "Неверные данные объявления" }, { status: 400 });
+    applyRateLimitHeaders(response, rateLimit);
+    return response;
   }
 
   const tutor = await createTutorListing(parsed.data);
   await createAdminAuditLog({
     adminUserId: auth.user.id,
-    action: "create_tutor_listing",
+    action: auth.user.role === "admin" ? "create_tutor_listing" : "create_tutor_listing_by_tutor",
     entityType: "tutor_listing",
     entityId: tutor.id,
     metadata: {
@@ -53,5 +77,7 @@ export async function POST(request: NextRequest) {
       pricePerHour: tutor.pricePerHour,
     },
   });
-  return NextResponse.json({ tutor }, { status: 201 });
+  const response = NextResponse.json({ tutor }, { status: 201 });
+  applyRateLimitHeaders(response, rateLimit);
+  return response;
 }

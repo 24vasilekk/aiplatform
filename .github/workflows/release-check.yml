@@ -1,0 +1,99 @@
+name: release-check
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: release-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ege_mvp_ci
+        options: >-
+          --health-cmd="pg_isready -U postgres -d ege_mvp_ci"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ege_mvp_ci?schema=public
+      AUTH_JWT_SECRET: ci-secure-jwt-secret-value-2026
+      APP_URL: http://127.0.0.1:3000
+      BILLING_PROVIDER: mock
+      ENV_READINESS_MODE: strict
+      SCHEMA_READINESS_POLICY: strict
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+
+      - name: Prisma migrate status
+        run: npx prisma migrate status
+
+      - name: Apply migrations
+        run: npm run prisma:migrate:deploy
+
+      - name: Env readiness gate
+        run: npm run env:check
+
+      - name: Schema/code compatibility gate
+        run: npm run schema:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Start app for smoke checks
+        run: |
+          npm run start &
+          echo $! > .next-start.pid
+          for i in {1..40}; do
+            if curl -fsS http://127.0.0.1:3000/api/health >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "App failed to start in time"
+          exit 1
+
+      - name: Smoke API checks
+        run: npm run smoke:api
+
+      - name: Stop app
+        if: always()
+        run: |
+          if [ -f .next-start.pid ]; then
+            kill $(cat .next-start.pid) || true
+          fi

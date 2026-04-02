@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type Course = {
   id: string;
@@ -57,7 +57,7 @@ type CustomTask = {
 type AdminUser = {
   id: string;
   email: string;
-  role: "student" | "admin";
+  role: "student" | "tutor" | "admin";
   createdAt: string;
 };
 
@@ -98,6 +98,30 @@ type AdminAuditPayment = {
   failedAt: string | null;
   canceledAt: string | null;
   failureReason: string | null;
+};
+
+type AdminAuditWallet = {
+  id: string;
+  userId: string;
+  balanceCents: number;
+  currency: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type AdminAuditWalletTransaction = {
+  id: string;
+  walletId: string;
+  userId: string;
+  direction: "credit" | "debit";
+  operationType: "topup" | "purchase" | "refund" | "manual_adjustment";
+  amountCents: number;
+  balanceBefore: number;
+  balanceAfter: number;
+  paymentIntentId: string | null;
+  idempotencyKey: string | null;
+  metadata: unknown;
+  createdAt: string;
 };
 
 type AdminAuditCourseAccess = {
@@ -191,11 +215,29 @@ type AdminUserAudit = {
     items: AdminAiAnalysis[];
     total: number;
   };
+  wallet: {
+    wallet: AdminAuditWallet;
+    transactions: {
+      items: AdminAuditWalletTransaction[];
+      total: number;
+    };
+  };
   activityEvents: {
     items: AdminAuditActivityEvent[];
     total: number;
   };
 };
+
+const USER_360_TABS = [
+  { id: "overview", label: "Обзор" },
+  { id: "payments", label: "Платежи" },
+  { id: "wallet", label: "Кошелек" },
+  { id: "accesses", label: "Доступы" },
+  { id: "progress", label: "Прогресс" },
+  { id: "ai", label: "AI" },
+  { id: "events", label: "События" },
+  { id: "actions", label: "Быстрые действия" },
+] as const;
 
 const AUDIT_EVENT_FILTERS: Array<{ value: "all" | AdminAuditEventName; label: string }> = [
   { value: "all", label: "Все события" },
@@ -295,7 +337,7 @@ export function AdminCourseManager({
   const [tasks, setTasks] = useState<CustomTask[]>(initialTasks);
   const [users, setUsers] = useState<AdminUser[]>(initialUsers);
   const [usersTotal, setUsersTotal] = useState(initialUsers.length);
-  const [usersTake] = useState(100);
+  const [usersTake] = useState(50);
   const [usersSkip, setUsersSkip] = useState(0);
   const [usersLoading, setUsersLoading] = useState(false);
   const [selectedKnowledgeFiles, setSelectedKnowledgeFiles] = useState<Record<string, File | null>>({});
@@ -315,14 +357,31 @@ export function AdminCourseManager({
   const [bulkTaskActionLoading, setBulkTaskActionLoading] = useState(false);
   const [userSearchQuery, setUserSearchQuery] = useState("");
   const [selectedAuditUserId, setSelectedAuditUserId] = useState<string | null>(
-    initialUsers.find((user) => user.role === "student")?.id ?? null,
+    initialUsers.find((user) => user.role !== "admin")?.id ?? null,
   );
   const [userAudit, setUserAudit] = useState<AdminUserAudit | null>(null);
   const [userAuditLoading, setUserAuditLoading] = useState(false);
   const [userAuditError, setUserAuditError] = useState<string | null>(null);
+  const [user360Tab, setUser360Tab] = useState<
+    "overview" | "payments" | "wallet" | "accesses" | "progress" | "ai" | "events" | "actions"
+  >("overview");
+  const [roleMutationLoading, setRoleMutationLoading] = useState(false);
+  const [roleMutationStatus, setRoleMutationStatus] = useState<string | null>(null);
+  const [accessGrantCourseId, setAccessGrantCourseId] = useState("");
+  const [accessGrantType, setAccessGrantType] = useState<"trial" | "subscription" | "purchase">("subscription");
+  const [accessGrantExpiresAt, setAccessGrantExpiresAt] = useState("");
+  const [accessGrantLoading, setAccessGrantLoading] = useState(false);
+  const [walletAdjustDirection, setWalletAdjustDirection] = useState<"credit" | "debit">("credit");
+  const [walletAdjustAmountRub, setWalletAdjustAmountRub] = useState("1000");
+  const [walletAdjustReason, setWalletAdjustReason] = useState("");
+  const [walletAdjustLoading, setWalletAdjustLoading] = useState(false);
   const [auditFrom, setAuditFrom] = useState("");
   const [auditTo, setAuditTo] = useState("");
   const [auditEventName, setAuditEventName] = useState<"all" | AdminAuditEventName>("all");
+  const userAuditRequestRef = useRef<{ requestId: number; controller: AbortController | null }>({
+    requestId: 0,
+    controller: null,
+  });
 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -359,12 +418,16 @@ export function AdminCourseManager({
 
   const filteredUsers = useMemo(() => {
     const normalized = userSearchQuery.trim().toLowerCase();
-    const students = users.filter((user) => user.role === "student");
-    if (!normalized) return students;
-    return students.filter(
+    const manageableUsers = users.filter((user) => user.role !== "admin");
+    if (!normalized) return manageableUsers;
+    return manageableUsers.filter(
       (user) => user.email.toLowerCase().includes(normalized) || user.id.toLowerCase().includes(normalized),
     );
   }, [users, userSearchQuery]);
+  const selectedAuditUser = useMemo(
+    () => users.find((user) => user.id === selectedAuditUserId) ?? null,
+    [users, selectedAuditUserId],
+  );
 
   const activeSectionCourseId = courses.some((course) => course.id === sectionCourseId)
     ? sectionCourseId
@@ -377,7 +440,7 @@ export function AdminCourseManager({
     : (lessons[0]?.id ?? "");
 
   async function loadCourses() {
-    const response = await fetch("/api/admin/courses?take=500&skip=0", { cache: "no-store" });
+    const response = await fetch("/api/admin/courses?take=120&skip=0", { cache: "no-store" });
     if (!response.ok) return;
 
     const data = (await response.json()) as Course[] | PagedApiResponse<Course>;
@@ -385,7 +448,7 @@ export function AdminCourseManager({
   }
 
   async function loadSections() {
-    const response = await fetch("/api/admin/sections?take=700&skip=0", { cache: "no-store" });
+    const response = await fetch("/api/admin/sections?take=180&skip=0", { cache: "no-store" });
     if (!response.ok) return;
 
     const data = (await response.json()) as Section[] | PagedApiResponse<Section>;
@@ -393,17 +456,16 @@ export function AdminCourseManager({
   }
 
   async function loadLessons() {
-    const response = await fetch("/api/admin/lessons?take=1000&skip=0", { cache: "no-store" });
+    const response = await fetch("/api/admin/lessons?take=240&skip=0", { cache: "no-store" });
     if (!response.ok) return;
 
     const data = (await response.json()) as Lesson[] | PagedApiResponse<Lesson>;
     const items = Array.isArray(data) ? data : data.items ?? [];
     setLessons(items);
-    await Promise.all(items.map((lesson) => loadLessonKnowledgeByLessonId(lesson.id)));
   }
 
   async function loadTasks() {
-    const response = await fetch("/api/admin/tasks?take=1200&skip=0", { cache: "no-store" });
+    const response = await fetch("/api/admin/tasks?take=320&skip=0", { cache: "no-store" });
     if (!response.ok) return;
 
     const data = (await response.json()) as CustomTask[] | PagedApiResponse<CustomTask>;
@@ -415,6 +477,7 @@ export function AdminCourseManager({
   async function loadUsers(nextSkip = usersSkip) {
     setUsersLoading(true);
     try {
+      setUserAuditError(null);
       const query = userSearchQuery.trim();
       const params = new URLSearchParams({
         take: String(usersTake),
@@ -425,7 +488,11 @@ export function AdminCourseManager({
       }
 
       const response = await fetch(`/api/admin/users?${params.toString()}`, { cache: "no-store" });
-      if (!response.ok) return;
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        setUserAuditError(payload.error ?? "Не удалось загрузить список пользователей.");
+        return;
+      }
 
       const data = (await response.json()) as AdminUser[] | PagedApiResponse<AdminUser>;
       if (Array.isArray(data)) {
@@ -438,6 +505,8 @@ export function AdminCourseManager({
       setUsers(data.items ?? []);
       setUsersTotal(data.total ?? (data.items?.length ?? 0));
       setUsersSkip(data.skip ?? Math.max(0, nextSkip));
+    } catch (error) {
+      setUserAuditError(error instanceof Error ? error.message : "Сетевая ошибка при загрузке пользователей.");
     } finally {
       setUsersLoading(false);
     }
@@ -510,14 +579,6 @@ export function AdminCourseManager({
 
   async function refreshAll() {
     await Promise.all([loadCourses(), loadSections(), loadLessons(), loadTasks(), loadUsers()]);
-  }
-
-  async function loadLessonKnowledgeByLessonId(lessonId: string) {
-    const response = await fetch(`/api/admin/lessons/${lessonId}/knowledge`, { cache: "no-store" });
-    if (!response.ok) return;
-
-    const data = (await response.json()) as { knowledge?: LessonKnowledge | null };
-    setLessonKnowledge((current) => ({ ...current, [lessonId]: data.knowledge ?? null }));
   }
 
   async function uploadLessonKnowledge(lesson: Lesson) {
@@ -945,6 +1006,12 @@ export function AdminCourseManager({
   }
 
   async function loadUserAudit(userId: string) {
+    userAuditRequestRef.current.requestId += 1;
+    const requestId = userAuditRequestRef.current.requestId;
+    userAuditRequestRef.current.controller?.abort();
+    const controller = new AbortController();
+    userAuditRequestRef.current.controller = controller;
+
     setUserAuditLoading(true);
     setUserAuditError(null);
 
@@ -952,36 +1019,109 @@ export function AdminCourseManager({
     params.set("userId", userId);
     if (auditFrom) params.set("from", auditFrom);
     if (auditTo) params.set("to", auditTo);
-    if (auditEventName !== "all") params.set("eventName", auditEventName);
-    params.set("eventsTake", "100");
-    params.set("paymentsTake", "100");
-    params.set("aiTake", "50");
+    params.set("eventsTake", "30");
+    params.set("paymentsTake", "25");
+    params.set("walletTake", "25");
+    params.set("accessesTake", "25");
+    params.set("aiTake", "20");
+    const sectionsByTab: Record<typeof user360Tab, string> = {
+      overview: "payments,wallet,accesses,progress,ai,events",
+      payments: "payments",
+      wallet: "wallet",
+      accesses: "accesses",
+      progress: "progress",
+      ai: "ai",
+      events: "events",
+      actions: "wallet,accesses",
+    };
+    params.set("sections", sectionsByTab[user360Tab]);
+    if (auditEventName !== "all") {
+      params.set("eventTypes", auditEventName);
+    }
 
     try {
-      const response = await fetch(`/api/admin/users/audit?${params.toString()}`, {
+      const response = await fetch(`/api/admin/users/360?${params.toString()}`, {
         cache: "no-store",
+        signal: controller.signal,
       });
       const data = (await response.json().catch(() => ({}))) as {
         error?: string;
-        audit?: AdminUserAudit | null;
-        users?: AdminUser[];
-        usersTotal?: number;
+        selector?: {
+          users?: AdminUser[];
+          total?: number;
+        };
+        sections?: {
+          profile: AdminUser;
+          accesses: { items: AdminAuditCourseAccess[] };
+          progress: AdminAuditProgressSnapshot;
+          payments: { items: AdminAuditPayment[]; total: number };
+          aiAnalyses: { items: AdminAiAnalysis[]; total: number };
+          events: { items: AdminAuditActivityEvent[]; total: number };
+          wallet: {
+            wallet: AdminAuditWallet;
+            transactions: { items: AdminAuditWalletTransaction[]; total: number };
+          };
+        } | null;
       };
+
+      if (requestId !== userAuditRequestRef.current.requestId) {
+        return;
+      }
 
       if (!response.ok) {
         setUserAuditError(data.error ?? "Не удалось загрузить аудит пользователя.");
         return;
       }
 
-      if (data.users) {
-        setUsers(data.users);
-        setUsersTotal(data.usersTotal ?? data.users.length);
+      if (data.selector?.users) {
+        setUsers(data.selector.users);
+        setUsersTotal(data.selector.total ?? data.selector.users.length);
       }
-      setUserAudit(data.audit ?? null);
+      if (!data.sections) {
+        setUserAudit(null);
+      } else {
+        setUserAudit({
+          user: data.sections.profile,
+          accesses: data.sections.accesses.items,
+          progress: data.sections.progress,
+          payments: {
+            items: data.sections.payments.items,
+            total: data.sections.payments.total,
+          },
+          aiAnalyses: {
+            items: data.sections.aiAnalyses.items,
+            total: data.sections.aiAnalyses.total,
+          },
+          wallet: {
+            wallet: data.sections.wallet.wallet,
+            transactions: {
+              items: data.sections.wallet.transactions.items,
+              total: data.sections.wallet.transactions.total,
+            },
+          },
+          activityEvents: {
+            items: data.sections.events.items,
+            total: data.sections.events.total,
+          },
+        });
+      }
+    } catch (error) {
+      if (controller.signal.aborted) {
+        return;
+      }
+      setUserAuditError(error instanceof Error ? error.message : "Не удалось загрузить аудит пользователя.");
     } finally {
-      setUserAuditLoading(false);
+      if (requestId === userAuditRequestRef.current.requestId) {
+        setUserAuditLoading(false);
+      }
     }
   }
+
+  useEffect(() => {
+    if (!selectedAuditUserId) return;
+    void loadUserAudit(selectedAuditUserId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAuditUserId, user360Tab, auditFrom, auditTo, auditEventName]);
 
   function formatDateTime(iso: string | null) {
     if (!iso) return "—";
@@ -999,6 +1139,213 @@ export function AdminCourseManager({
     } catch {
       return `${(cents / 100).toFixed(2)} ${currency.toUpperCase()}`;
     }
+  }
+
+  function createRoleMutationIdempotencyKey(userId: string, role: "student" | "tutor") {
+    const randomPart =
+      typeof globalThis.crypto !== "undefined" && "randomUUID" in globalThis.crypto
+        ? globalThis.crypto.randomUUID()
+        : Math.random().toString(36).slice(2, 12);
+    return `admin-user-role:${userId}:${role}:${randomPart}`;
+  }
+
+  function createAdminActionIdempotencyKey(prefix: string, userId: string) {
+    const randomPart =
+      typeof globalThis.crypto !== "undefined" && "randomUUID" in globalThis.crypto
+        ? globalThis.crypto.randomUUID()
+        : Math.random().toString(36).slice(2, 12);
+    return `${prefix}:${userId}:${randomPart}`;
+  }
+
+  async function setUserTutorRole(userId: string, role: "student" | "tutor") {
+    setRoleMutationLoading(true);
+    setRoleMutationStatus(null);
+    setUserAuditError(null);
+
+    const idempotencyKey = createRoleMutationIdempotencyKey(userId, role);
+    try {
+      const response = await fetch("/api/admin/users", {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+          "x-idempotency-key": idempotencyKey,
+        },
+        body: JSON.stringify({
+          userId,
+          role,
+          idempotencyKey,
+        }),
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        deduplicated?: boolean;
+      };
+      if (!response.ok) {
+        setUserAuditError(data.error ?? "Не удалось обновить роль.");
+        return;
+      }
+
+      setRoleMutationStatus(
+        role === "tutor"
+          ? data.deduplicated
+            ? "Роль tutor уже была назначена."
+            : "Роль tutor назначена."
+          : data.deduplicated
+            ? "Роль tutor уже была снята."
+            : "Роль tutor снята.",
+      );
+      await loadUsers(usersSkip);
+      await loadUserAudit(userId);
+    } finally {
+      setRoleMutationLoading(false);
+    }
+  }
+
+  async function grantCourseAccessForUser(userId: string) {
+    const courseId = accessGrantCourseId.trim();
+    if (!courseId) {
+      setUserAuditError("Укажите courseId для выдачи доступа.");
+      return;
+    }
+    setAccessGrantLoading(true);
+    setUserAuditError(null);
+    setRoleMutationStatus(null);
+    const idempotencyKey = createAdminActionIdempotencyKey("admin-course-access", userId);
+    try {
+      const payload: {
+        userId: string;
+        courseId: string;
+        accessType: "trial" | "subscription" | "purchase";
+        expiresAt?: string;
+        idempotencyKey: string;
+      } = {
+        userId,
+        courseId,
+        accessType: accessGrantType,
+        idempotencyKey,
+      };
+      if (accessGrantExpiresAt) {
+        payload.expiresAt = new Date(accessGrantExpiresAt).toISOString();
+      }
+      const response = await fetch("/api/admin/users/access", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-idempotency-key": idempotencyKey,
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = (await response.json().catch(() => ({}))) as { error?: string; deduplicated?: boolean };
+      if (!response.ok) {
+        setUserAuditError(data.error ?? "Не удалось выдать доступ.");
+        return;
+      }
+      setRoleMutationStatus(data.deduplicated ? "Доступ уже был выдан (dedup)." : "Доступ к курсу выдан.");
+      await loadUserAudit(userId);
+    } finally {
+      setAccessGrantLoading(false);
+    }
+  }
+
+  async function adjustWalletForUser(userId: string) {
+    const amountRub = Number.parseFloat(walletAdjustAmountRub.replace(",", "."));
+    if (!Number.isFinite(amountRub) || amountRub <= 0) {
+      setUserAuditError("Укажите корректную сумму для корректировки кошелька.");
+      return;
+    }
+    setWalletAdjustLoading(true);
+    setUserAuditError(null);
+    const idempotencyKey = createAdminActionIdempotencyKey("admin-wallet-adjust", userId);
+    try {
+      const response = await fetch("/api/admin/wallets", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-idempotency-key": idempotencyKey,
+        },
+        body: JSON.stringify({
+          userId,
+          direction: walletAdjustDirection,
+          amountRub,
+          reason: walletAdjustReason.trim() || undefined,
+          idempotencyKey,
+        }),
+      });
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        setUserAuditError(data.error ?? "Не удалось скорректировать баланс.");
+        return;
+      }
+      setRoleMutationStatus(
+        walletAdjustDirection === "credit" ? "Баланс пополнен админом." : "Баланс списан админом.",
+      );
+      await loadUserAudit(userId);
+    } finally {
+      setWalletAdjustLoading(false);
+    }
+  }
+
+  function exportUser360Json() {
+    if (!userAudit) return;
+    const content = JSON.stringify(userAudit, null, 2);
+    const blob = new Blob([content], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `user-360-${userAudit.user.id}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportUser360Csv() {
+    if (!userAudit) return;
+    const rows: string[][] = [];
+    const addRow = (...cols: Array<string | number | null | undefined>) =>
+      rows.push(cols.map((value) => (value == null ? "" : String(value))));
+    addRow("section", "field", "value1", "value2", "value3");
+    addRow("profile", "email", userAudit.user.email);
+    addRow("profile", "id", userAudit.user.id);
+    addRow("profile", "role", userAudit.user.role);
+    addRow("summary", "progress_percent", userAudit.progress.summary.percent);
+    addRow("summary", "payments_total", userAudit.payments.total);
+    addRow("summary", "wallet_balance_cents", userAudit.wallet.wallet.balanceCents);
+    addRow("summary", "wallet_currency", userAudit.wallet.wallet.currency);
+    for (const payment of userAudit.payments.items) {
+      addRow("payments", payment.id, payment.status, payment.planId, payment.amountCents);
+    }
+    for (const access of userAudit.accesses) {
+      addRow("accesses", access.id, access.courseId, access.accessType, access.expiresAt);
+    }
+    for (const tx of userAudit.wallet.transactions.items) {
+      addRow("wallet", tx.id, tx.direction, tx.operationType, tx.amountCents);
+    }
+    for (const analysis of userAudit.aiAnalyses.items) {
+      addRow("ai", analysis.id, analysis.status, analysis.mode, analysis.result?.scorePercent ?? "");
+    }
+    for (const event of userAudit.activityEvents.items) {
+      addRow("events", event.id, event.eventName, event.path, event.createdAt);
+    }
+    const csv = rows
+      .map((row) =>
+        row
+          .map((value) => {
+            const escaped = value.replace(/\"/g, "\"\"");
+            return /[\",\n;]/.test(escaped) ? `"${escaped}"` : escaped;
+          })
+          .join(","),
+      )
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `user-360-${userAudit.user.id}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   }
 
   return (
@@ -1626,6 +1973,12 @@ export function AdminCourseManager({
                 placeholder="example@mail.com или user id"
                 value={userSearchQuery}
                 onChange={(event) => setUserSearchQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void loadUsers(0);
+                  }
+                }}
               />
               <button type="button" className="btn-ghost mt-2 w-full" onClick={() => void loadUsers()}>
                 {usersLoading ? "Загрузка..." : "Обновить список"}
@@ -1666,11 +2019,13 @@ export function AdminCourseManager({
                           : "border-sky-100 bg-sky-50/30 hover:bg-sky-50"
                       }`}
                       onClick={() => {
+                        setRoleMutationStatus(null);
                         setSelectedAuditUserId(user.id);
                         void loadUserAudit(user.id);
                       }}
                     >
                       <p className="font-medium">{user.email}</p>
+                      <p className="text-xs text-slate-600">role: {user.role}</p>
                       <p className="text-xs text-slate-500">{user.id}</p>
                     </button>
                   </li>
@@ -1718,7 +2073,7 @@ export function AdminCourseManager({
                 <button
                   type="button"
                   className="btn-ghost mt-5"
-                  disabled={!selectedAuditUserId || userAuditLoading}
+                  disabled={!selectedAuditUserId || userAuditLoading || roleMutationLoading}
                   onClick={() => {
                     if (!selectedAuditUserId) return;
                     void loadUserAudit(selectedAuditUserId);
@@ -1732,16 +2087,60 @@ export function AdminCourseManager({
             {!selectedAuditUserId ? (
               <p className="text-sm text-slate-500">Выберите пользователя слева.</p>
             ) : null}
-            {userAuditError ? <p className="text-sm text-rose-600">{userAuditError}</p> : null}
+            {userAuditError ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm text-rose-600">{userAuditError}</p>
+                <button
+                  type="button"
+                  className="btn-ghost px-2 py-1 text-xs"
+                  disabled={userAuditLoading}
+                  onClick={() => {
+                    if (selectedAuditUserId) {
+                      void loadUserAudit(selectedAuditUserId);
+                      return;
+                    }
+                    void loadUsers(usersSkip);
+                  }}
+                >
+                  Повторить
+                </button>
+              </div>
+            ) : null}
 
             {userAudit && selectedAuditUserId === userAudit.user.id ? (
-              <>
+              <div className="rounded-md border border-sky-200 bg-sky-50/30 p-3">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-base font-semibold">User 360</h3>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button type="button" className="btn-ghost px-2 py-1 text-xs" onClick={exportUser360Json}>
+                      Экспорт JSON
+                    </button>
+                    <button type="button" className="btn-ghost px-2 py-1 text-xs" onClick={exportUser360Csv}>
+                      Экспорт CSV
+                    </button>
+                  </div>
+                </div>
+                <div className="mb-3 flex flex-wrap gap-2">
+                  {USER_360_TABS.map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      className={`btn-ghost px-2 py-1 text-xs ${
+                        user360Tab === tab.id ? "border-sky-400 bg-sky-100" : ""
+                      }`}
+                      onClick={() => setUser360Tab(tab.id)}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
                 <div className="rounded-md border border-slate-200 bg-white p-3">
                   <p className="text-base font-semibold">{userAudit.user.email}</p>
                   <p className="text-xs text-slate-600">
                     id: <code>{userAudit.user.id}</code> · created: {formatDateTime(userAudit.user.createdAt)}
                   </p>
-                  <div className="mt-2 grid gap-2 md:grid-cols-5">
+                  <p className="mt-1 text-xs text-slate-600">Текущая роль: {userAudit.user.role}</p>
+                  <div className="mt-2 grid gap-2 md:grid-cols-6">
                     <p className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs">
                       Прогресс: {userAudit.progress.summary.percent}%
                     </p>
@@ -1755,11 +2154,15 @@ export function AdminCourseManager({
                       AI-анализы: {userAudit.aiAnalyses.total}
                     </p>
                     <p className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs">
+                      Кошелек: {userAudit.wallet.transactions.total}
+                    </p>
+                    <p className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-xs">
                       События: {userAudit.activityEvents.total}
                     </p>
                   </div>
                 </div>
 
+                {(user360Tab === "overview" || user360Tab === "payments") && (
                 <div className="rounded-md border border-slate-200 bg-white p-3">
                   <h3 className="text-sm font-semibold">История оплат</h3>
                   {userAudit.payments.items.length === 0 ? (
@@ -1785,7 +2188,38 @@ export function AdminCourseManager({
                     </ul>
                   )}
                 </div>
+                )}
 
+                {(user360Tab === "overview" || user360Tab === "wallet") && (
+                <div className="rounded-md border border-slate-200 bg-white p-3">
+                  <h3 className="text-sm font-semibold">Кошелек: пополнения и списания</h3>
+                  <p className="mt-1 text-xs text-slate-600">
+                    Баланс: {formatMoney(userAudit.wallet.wallet.balanceCents, userAudit.wallet.wallet.currency)} ·
+                    транзакций: {userAudit.wallet.transactions.total}
+                  </p>
+                  {userAudit.wallet.transactions.items.length === 0 ? (
+                    <p className="mt-1 text-xs text-slate-500">Транзакций кошелька нет.</p>
+                  ) : (
+                    <ul className="mt-2 space-y-2 text-xs">
+                      {userAudit.wallet.transactions.items.map((item) => (
+                        <li key={item.id} className="rounded border border-slate-200 bg-slate-50 p-2">
+                          <p className="font-medium">
+                            {item.direction === "credit" ? "+" : "-"}
+                            {formatMoney(item.amountCents, userAudit.wallet.wallet.currency)} · {item.operationType}
+                          </p>
+                          <p className="text-slate-600">
+                            Баланс: {formatMoney(item.balanceBefore, userAudit.wallet.wallet.currency)} →{" "}
+                            {formatMoney(item.balanceAfter, userAudit.wallet.wallet.currency)}
+                          </p>
+                          <p className="text-slate-600">created: {formatDateTime(item.createdAt)}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                )}
+
+                {(user360Tab === "overview" || user360Tab === "accesses") && (
                 <div className="rounded-md border border-slate-200 bg-white p-3">
                   <h3 className="text-sm font-semibold">Доступы к курсам</h3>
                   {userAudit.accesses.length === 0 ? (
@@ -1801,7 +2235,9 @@ export function AdminCourseManager({
                     </ul>
                   )}
                 </div>
+                )}
 
+                {(user360Tab === "overview" || user360Tab === "progress") && (
                 <div className="rounded-md border border-slate-200 bg-white p-3">
                   <h3 className="text-sm font-semibold">Прогресс</h3>
                   <p className="mt-1 text-xs text-slate-600">
@@ -1823,7 +2259,9 @@ export function AdminCourseManager({
                     ))}
                   </ul>
                 </div>
+                )}
 
+                {(user360Tab === "overview" || user360Tab === "ai") && (
                 <div className="rounded-md border border-slate-200 bg-white p-3">
                   <h3 className="text-sm font-semibold">AI-анализы</h3>
                   {userAudit.aiAnalyses.items.length === 0 ? (
@@ -1847,7 +2285,9 @@ export function AdminCourseManager({
                     </ul>
                   )}
                 </div>
+                )}
 
+                {(user360Tab === "overview" || user360Tab === "events") && (
                 <div className="rounded-md border border-slate-200 bg-white p-3">
                   <h3 className="text-sm font-semibold">События активности</h3>
                   {userAudit.activityEvents.items.length === 0 ? (
@@ -1865,7 +2305,120 @@ export function AdminCourseManager({
                     </ul>
                   )}
                 </div>
-              </>
+                )}
+
+                {user360Tab === "actions" ? (
+                  <div className="space-y-3">
+                    <div className="rounded-md border border-slate-200 bg-white p-3">
+                      <h3 className="text-sm font-semibold">Быстрые действия: роль tutor</h3>
+                      {selectedAuditUser && selectedAuditUser.role !== "admin" ? (
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            className="btn-ghost px-2 py-1 text-xs"
+                            disabled={roleMutationLoading || selectedAuditUser.role === "tutor"}
+                            onClick={() => void setUserTutorRole(selectedAuditUser.id, "tutor")}
+                          >
+                            {roleMutationLoading && selectedAuditUser.role !== "tutor"
+                              ? "Сохраняем..."
+                              : "Назначить tutor"}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-ghost px-2 py-1 text-xs"
+                            disabled={roleMutationLoading || selectedAuditUser.role === "student"}
+                            onClick={() => void setUserTutorRole(selectedAuditUser.id, "student")}
+                          >
+                            {roleMutationLoading && selectedAuditUser.role !== "student"
+                              ? "Сохраняем..."
+                              : "Снять роль tutor"}
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="mt-1 text-xs text-slate-500">Роль администратора не меняется из этого экрана.</p>
+                      )}
+                    </div>
+
+                    <div className="rounded-md border border-slate-200 bg-white p-3">
+                      <h3 className="text-sm font-semibold">Быстрые действия: выдать доступ к курсу</h3>
+                      <div className="mt-2 grid gap-2 md:grid-cols-4">
+                        <input
+                          type="text"
+                          className="w-full"
+                          placeholder="courseId"
+                          value={accessGrantCourseId}
+                          onChange={(event) => setAccessGrantCourseId(event.target.value)}
+                        />
+                        <select
+                          className="w-full"
+                          value={accessGrantType}
+                          onChange={(event) =>
+                            setAccessGrantType(event.target.value as "trial" | "subscription" | "purchase")
+                          }
+                        >
+                          <option value="subscription">subscription</option>
+                          <option value="trial">trial</option>
+                          <option value="purchase">purchase</option>
+                        </select>
+                        <input
+                          type="date"
+                          className="w-full"
+                          value={accessGrantExpiresAt}
+                          onChange={(event) => setAccessGrantExpiresAt(event.target.value)}
+                        />
+                        <button
+                          type="button"
+                          className="btn-ghost"
+                          disabled={accessGrantLoading}
+                          onClick={() => void grantCourseAccessForUser(userAudit.user.id)}
+                        >
+                          {accessGrantLoading ? "Выдача..." : "Выдать доступ"}
+                        </button>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Если дата пустая, доступ выдается без срока истечения.
+                      </p>
+                    </div>
+
+                    <div className="rounded-md border border-slate-200 bg-white p-3">
+                      <h3 className="text-sm font-semibold">Быстрые действия: корректировка кошелька</h3>
+                      <div className="mt-2 grid gap-2 md:grid-cols-4">
+                        <select
+                          className="w-full"
+                          value={walletAdjustDirection}
+                          onChange={(event) => setWalletAdjustDirection(event.target.value as "credit" | "debit")}
+                        >
+                          <option value="credit">Пополнение (credit)</option>
+                          <option value="debit">Списание (debit)</option>
+                        </select>
+                        <input
+                          type="text"
+                          className="w-full"
+                          value={walletAdjustAmountRub}
+                          onChange={(event) => setWalletAdjustAmountRub(event.target.value)}
+                          placeholder="Сумма, RUB"
+                        />
+                        <input
+                          type="text"
+                          className="w-full"
+                          value={walletAdjustReason}
+                          onChange={(event) => setWalletAdjustReason(event.target.value)}
+                          placeholder="Причина (optional)"
+                        />
+                        <button
+                          type="button"
+                          className="btn-ghost"
+                          disabled={walletAdjustLoading}
+                          onClick={() => void adjustWalletForUser(userAudit.user.id)}
+                        >
+                          {walletAdjustLoading ? "Сохраняем..." : "Применить"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+                {roleMutationStatus ? <p className="text-xs text-slate-600">{roleMutationStatus}</p> : null}
+              </div>
             ) : null}
           </div>
         </div>

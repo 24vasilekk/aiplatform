@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { authCookieName } from "@/lib/auth";
+import { authCookieName } from "@/lib/auth-constants";
 
 const AUTH_COOKIE_MAX_AGE_SEC = 60 * 60 * 24 * 7;
 

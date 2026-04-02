@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/api-auth";
 import { createAnalyticsEvent, saveLessonProgress } from "@/lib/db";
+import { syncCompletedCourseLoyalty } from "@/lib/loyalty";
 
 const schema = z.object({
   status: z.enum(["not_started", "in_progress", "completed"]).default("in_progress"),
@@ -43,6 +44,12 @@ export async function POST(
       lastPositionSec: parsed.data.lastPositionSec,
     },
   });
+
+  try {
+    await syncCompletedCourseLoyalty(auth.user.id);
+  } catch {
+    // Loyalty synchronization should not block progress API.
+  }
 
   return NextResponse.json({ ok: true, lessonId });
 }

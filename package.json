@@ -15,7 +15,10 @@
     "prisma:migrate:deploy": "prisma migrate deploy",
     "deploy:migrate": "npm run prisma:generate && npm run prisma:migrate:deploy",
     "prisma:db:push": "prisma db push --skip-generate",
-    "prisma:migrate:baseline:part34": "prisma migrate resolve --applied 20260401090000_google_oauth && prisma migrate resolve --applied 20260401094000_add_blog_posts && prisma migrate resolve --applied 20260401103000_add_analytics_events && prisma migrate resolve --applied 20260401120000_part3_part4_ops && prisma migrate resolve --applied 20260401143000_performance_hardening_indexes"
+    "prisma:migrate:baseline:part34": "prisma migrate resolve --applied 20260401090000_google_oauth && prisma migrate resolve --applied 20260401094000_add_blog_posts && prisma migrate resolve --applied 20260401103000_add_analytics_events && prisma migrate resolve --applied 20260401120000_part3_part4_ops && prisma migrate resolve --applied 20260401143000_performance_hardening_indexes",
+    "schema:check": "node scripts/schema-readiness-check.mjs",
+    "env:check": "node scripts/env-readiness-check.mjs",
+    "smoke:api": "node scripts/smoke-api-check.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.16.2",

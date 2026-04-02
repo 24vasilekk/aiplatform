@@ -11,7 +11,7 @@ import type {
   AiAnalysisStatus,
 } from "@/types/ai-solution-analysis";
 
-export type UserRole = "student" | "admin";
+export type UserRole = "student" | "tutor" | "admin";
 
 export type UserRecord = {
   id: string;
@@ -80,6 +80,7 @@ export type ChatSessionRecord = {
 
 export type CustomCourseRecord = {
   id: string;
+  ownerId: string | null;
   title: string;
   description: string;
   subject: Subject;
@@ -295,6 +296,61 @@ export type AdminWalletTransactionRecord = WalletTransactionRecord & {
   userEmail: string;
 };
 
+export type LoyaltyDirectionRecord = "credit" | "debit";
+
+export type LoyaltyReasonRecord =
+  | "course_completion"
+  | "discount_redeem"
+  | "discount_rollback"
+  | "expiration"
+  | "manual_adjustment";
+
+export type LoyaltyAccountRecord = {
+  id: string;
+  userId: string;
+  pointsBalance: number;
+  lifetimeEarnedPoints: number;
+  lifetimeRedeemedPoints: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type LoyaltyTransactionRecord = {
+  id: string;
+  loyaltyAccountId: string;
+  userId: string;
+  direction: LoyaltyDirectionRecord;
+  reason: LoyaltyReasonRecord;
+  points: number;
+  balanceBefore: number;
+  balanceAfter: number;
+  courseId: string | null;
+  paymentIntentId: string | null;
+  idempotencyKey: string | null;
+  metadata: unknown;
+  expiresAt: string | null;
+  createdAt: string;
+};
+
+export type AdminLoyaltyAccountRecord = LoyaltyAccountRecord & {
+  userEmail: string;
+};
+
+export type AdminLoyaltyTransactionRecord = LoyaltyTransactionRecord & {
+  userEmail: string;
+};
+
+export type AdminAuditLogRecord = {
+  id: string;
+  adminUserId: string;
+  adminUserEmail: string;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  metadata: unknown;
+  createdAt: string;
+};
+
 export type PasswordResetTokenRecord = {
   id: string;
   userId: string;
@@ -461,15 +517,30 @@ function toIsoDay(date: Date) {
   return startOfUtcDay(date).toISOString();
 }
 
-function mapRole(role: "STUDENT" | "ADMIN"): UserRole {
-  return role === "ADMIN" ? "admin" : "student";
+function mapRole(role: "STUDENT" | "TUTOR" | "ADMIN"): UserRole {
+  if (role === "ADMIN") return "admin";
+  if (role === "TUTOR") return "tutor";
+  return "student";
+}
+
+function mapUserRole(role: UserRole): "STUDENT" | "TUTOR" | "ADMIN" {
+  if (role === "admin") return "ADMIN";
+  if (role === "tutor") return "TUTOR";
+  return "STUDENT";
+}
+
+function inferRoleByEmail(email: string): UserRole {
+  const normalized = email.toLowerCase().trim();
+  if (normalized === "admin@ege.local") return "admin";
+  if (normalized.endsWith("@tutor.local")) return "tutor";
+  return "student";
 }
 
 function toUserRecord(user: {
   id: string;
   email: string;
   passwordHash: string | null;
-  role: "STUDENT" | "ADMIN";
+  role: "STUDENT" | "TUTOR" | "ADMIN";
   createdAt: Date;
 }): UserRecord {
   return {
@@ -837,6 +908,96 @@ function toWalletTransactionRecord(row: {
   };
 }
 
+function toLoyaltyDirection(direction: "CREDIT" | "DEBIT"): LoyaltyDirectionRecord {
+  return direction === "DEBIT" ? "debit" : "credit";
+}
+
+function toLoyaltyReason(
+  reason: "COURSE_COMPLETION" | "DISCOUNT_REDEEM" | "DISCOUNT_ROLLBACK" | "EXPIRATION" | "MANUAL_ADJUSTMENT",
+): LoyaltyReasonRecord {
+  if (reason === "COURSE_COMPLETION") return "course_completion";
+  if (reason === "DISCOUNT_REDEEM") return "discount_redeem";
+  if (reason === "DISCOUNT_ROLLBACK") return "discount_rollback";
+  if (reason === "EXPIRATION") return "expiration";
+  return "manual_adjustment";
+}
+
+function toLoyaltyAccountRecord(row: {
+  id: string;
+  userId: string;
+  pointsBalance: number;
+  lifetimeEarnedPoints: number;
+  lifetimeRedeemedPoints: number;
+  createdAt: Date;
+  updatedAt: Date;
+}): LoyaltyAccountRecord {
+  return {
+    id: row.id,
+    userId: row.userId,
+    pointsBalance: row.pointsBalance,
+    lifetimeEarnedPoints: row.lifetimeEarnedPoints,
+    lifetimeRedeemedPoints: row.lifetimeRedeemedPoints,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+function toLoyaltyTransactionRecord(row: {
+  id: string;
+  loyaltyAccountId: string;
+  userId: string;
+  direction: "CREDIT" | "DEBIT";
+  reason: "COURSE_COMPLETION" | "DISCOUNT_REDEEM" | "DISCOUNT_ROLLBACK" | "EXPIRATION" | "MANUAL_ADJUSTMENT";
+  points: number;
+  balanceBefore: number;
+  balanceAfter: number;
+  courseId: string | null;
+  paymentIntentId: string | null;
+  idempotencyKey: string | null;
+  metadata: unknown;
+  expiresAt: Date | null;
+  createdAt: Date;
+}): LoyaltyTransactionRecord {
+  return {
+    id: row.id,
+    loyaltyAccountId: row.loyaltyAccountId,
+    userId: row.userId,
+    direction: toLoyaltyDirection(row.direction),
+    reason: toLoyaltyReason(row.reason),
+    points: row.points,
+    balanceBefore: row.balanceBefore,
+    balanceAfter: row.balanceAfter,
+    courseId: row.courseId,
+    paymentIntentId: row.paymentIntentId,
+    idempotencyKey: row.idempotencyKey,
+    metadata: row.metadata ?? null,
+    expiresAt: row.expiresAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+function toAdminAuditLogRecord(row: {
+  id: string;
+  adminUserId: string;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  metadata: unknown;
+  createdAt: Date;
+  adminUser: { email: string };
+}): AdminAuditLogRecord {
+  return {
+    id: row.id,
+    adminUserId: row.adminUserId,
+    adminUserEmail: row.adminUser.email,
+    action: row.action,
+    entityType: row.entityType,
+    entityId: row.entityId ?? null,
+    metadata: row.metadata ?? null,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
 function toAdminWalletRecord(row: {
   id: string;
   userId: string;
@@ -930,8 +1091,18 @@ export async function findUserById(userId: string) {
   return user ? toUserRecord(user) : null;
 }
 
+export async function updateUserRole(userId: string, role: UserRole) {
+  const row = await prisma.user.update({
+    where: { id: userId },
+    data: {
+      role: mapUserRole(role),
+    },
+  });
+  return toUserRecord(row);
+}
+
 export async function createUser(input: { email: string; passwordHash: string; role?: UserRole }) {
-  const role = input.role === "admin" ? "ADMIN" : "STUDENT";
+  const role = mapUserRole(input.role ?? inferRoleByEmail(input.email));
   const user = await prisma.user.create({
     data: {
       email: input.email.toLowerCase(),
@@ -987,7 +1158,7 @@ export async function findOrCreateOAuthUser(input: {
         return toUserRecord(existingUser);
       }
 
-      const role = email === "admin@ege.local" ? "ADMIN" : "STUDENT";
+      const role = mapUserRole(inferRoleByEmail(email));
       const createdUser = await tx.user.create({
         data: {
           email,
@@ -1093,7 +1264,7 @@ export async function findOrLinkTelegramUser(input: {
       }
 
       const email = `tg_${providerAccountId}@telegram.local`;
-      const role = email === "admin@ege.local" ? "ADMIN" : "STUDENT";
+      const role = mapUserRole(inferRoleByEmail(email));
       const createdUser = await tx.user.create({
         data: {
           email,
@@ -1173,6 +1344,47 @@ export async function listCourseAccess(userId: string) {
     orderBy: { createdAt: "desc" },
   });
   return accesses.map(toAccessRecord);
+}
+
+export async function listCourseAccessPaged(input: {
+  userId: string;
+  from?: Date;
+  to?: Date;
+  take?: number;
+  skip?: number;
+  sortBy?: "createdAt" | "expiresAt";
+  sortDir?: "asc" | "desc";
+}) {
+  const take = Math.max(1, Math.min(input.take ?? 100, 500));
+  const skip = Math.max(0, input.skip ?? 0);
+  const sortBy = input.sortBy ?? "createdAt";
+  const sortDir = input.sortDir ?? "desc";
+  const where: Prisma.CourseAccessWhereInput = {
+    userId: input.userId,
+    createdAt: {
+      gte: input.from,
+      lte: input.to,
+    },
+  };
+
+  const [rows, total] = await Promise.all([
+    prisma.courseAccess.findMany({
+      where,
+      orderBy: {
+        [sortBy]: sortDir,
+      },
+      take,
+      skip,
+    }),
+    prisma.courseAccess.count({ where }),
+  ]);
+
+  return {
+    rows: rows.map(toAccessRecord),
+    total,
+    take,
+    skip,
+  } satisfies PagedResult<CourseAccessRecord>;
 }
 
 export async function hasCourseAccess(userId: string, courseId: string) {
@@ -1419,7 +1631,7 @@ export async function listUsersPaged(input?: {
   const query = input?.query?.trim();
 
   const where: Prisma.UserWhereInput = {
-    role: input?.role ? (input.role === "admin" ? "ADMIN" : "STUDENT") : undefined,
+    role: input?.role ? mapUserRole(input.role) : undefined,
     OR: query
       ? [
           {
@@ -1466,6 +1678,7 @@ export async function listCustomCourses() {
   const courses = await prisma.customCourse.findMany({ orderBy: { createdAt: "asc" } });
   return courses.map((course) => ({
     id: course.id,
+    ownerId: course.ownerId,
     title: course.title,
     description: course.description,
     subject: course.subject,
@@ -1474,22 +1687,28 @@ export async function listCustomCourses() {
 }
 
 export async function listCustomCoursesPaged(input?: {
+  ownerId?: string;
   take?: number;
   skip?: number;
 }): Promise<PagedResult<CustomCourseRecord>> {
   const take = clampTake(input?.take, 200, 500);
   const skip = clampSkip(input?.skip);
+  const where: Prisma.CustomCourseWhereInput = {
+    ownerId: input?.ownerId,
+  };
   const [rows, total] = await Promise.all([
     prisma.customCourse.findMany({
+      where,
       orderBy: { createdAt: "asc" },
       take,
       skip,
     }),
-    prisma.customCourse.count(),
+    prisma.customCourse.count({ where }),
   ]);
   return {
     rows: rows.map((course) => ({
       id: course.id,
+      ownerId: course.ownerId,
       title: course.title,
       description: course.description,
       subject: course.subject,
@@ -1502,6 +1721,7 @@ export async function listCustomCoursesPaged(input?: {
 }
 
 export async function createCustomCourse(input: {
+  ownerId?: string | null;
   title: string;
   description: string;
   subject: Subject;
@@ -1509,6 +1729,7 @@ export async function createCustomCourse(input: {
   const course = await prisma.customCourse.create({
     data: {
       id: `custom-${uid("course")}`,
+      ownerId: input.ownerId ?? null,
       title: input.title,
       description: input.description,
       subject: input.subject,
@@ -1517,6 +1738,7 @@ export async function createCustomCourse(input: {
 
   return {
     id: course.id,
+    ownerId: course.ownerId,
     title: course.title,
     description: course.description,
     subject: course.subject,
@@ -1540,6 +1762,7 @@ export async function updateCustomCourse(
 
     return {
       id: course.id,
+      ownerId: course.ownerId,
       title: course.title,
       description: course.description,
       subject: course.subject,
@@ -1978,6 +2201,330 @@ export async function deleteCustomTask(taskId: string) {
   }
 }
 
+async function findOwnedCourse(ownerId: string, courseId: string) {
+  return prisma.customCourse.findFirst({
+    where: { id: courseId, ownerId },
+  });
+}
+
+async function findOwnedSection(ownerId: string, sectionId: string) {
+  return prisma.customSection.findFirst({
+    where: { id: sectionId, course: { ownerId } },
+  });
+}
+
+async function findOwnedLesson(ownerId: string, lessonId: string) {
+  return prisma.customLesson.findFirst({
+    where: { id: lessonId, section: { course: { ownerId } } },
+  });
+}
+
+export async function canTutorManageLesson(ownerId: string, lessonId: string) {
+  const lesson = await findOwnedLesson(ownerId, lessonId);
+  return Boolean(lesson);
+}
+
+async function findOwnedTask(ownerId: string, taskId: string) {
+  return prisma.customTask.findFirst({
+    where: { id: taskId, lesson: { section: { course: { ownerId } } } },
+  });
+}
+
+export async function listTutorCustomCoursesPaged(
+  ownerId: string,
+  input?: { take?: number; skip?: number },
+): Promise<PagedResult<CustomCourseRecord>> {
+  return listCustomCoursesPaged({
+    ownerId,
+    take: input?.take,
+    skip: input?.skip,
+  });
+}
+
+export async function createTutorCustomCourse(
+  ownerId: string,
+  input: {
+    title: string;
+    description: string;
+    subject: Subject;
+  },
+) {
+  return createCustomCourse({
+    ownerId,
+    title: input.title,
+    description: input.description,
+    subject: input.subject,
+  });
+}
+
+export async function updateTutorCustomCourse(
+  ownerId: string,
+  courseId: string,
+  input: { title?: string; description?: string; subject?: Subject },
+) {
+  const course = await findOwnedCourse(ownerId, courseId);
+  if (!course) return null;
+  return updateCustomCourse(courseId, input);
+}
+
+export async function deleteTutorCustomCourse(ownerId: string, courseId: string) {
+  const course = await findOwnedCourse(ownerId, courseId);
+  if (!course) return false;
+  return deleteCustomCourse(courseId);
+}
+
+export async function listTutorCustomSectionsPaged(
+  ownerId: string,
+  input?: {
+    courseId?: string;
+    take?: number;
+    skip?: number;
+  },
+): Promise<PagedResult<CustomSectionRecord>> {
+  const take = clampTake(input?.take, 300, 700);
+  const skip = clampSkip(input?.skip);
+  const where: Prisma.CustomSectionWhereInput = {
+    courseId: input?.courseId,
+    course: { ownerId },
+  };
+  const [rows, total] = await Promise.all([
+    prisma.customSection.findMany({
+      where,
+      orderBy: { createdAt: "asc" },
+      take,
+      skip,
+    }),
+    prisma.customSection.count({ where }),
+  ]);
+  return {
+    rows: rows.map((section) => ({
+      id: section.id,
+      courseId: section.courseId,
+      title: section.title,
+      createdAt: section.createdAt.toISOString(),
+    })),
+    total,
+    take,
+    skip,
+  };
+}
+
+export async function createTutorCustomSection(ownerId: string, input: { courseId: string; title: string }) {
+  const course = await findOwnedCourse(ownerId, input.courseId);
+  if (!course) return null;
+  return createCustomSection(input);
+}
+
+export async function updateTutorCustomSection(ownerId: string, sectionId: string, input: { title?: string }) {
+  const section = await findOwnedSection(ownerId, sectionId);
+  if (!section) return null;
+  return updateCustomSection(sectionId, input);
+}
+
+export async function deleteTutorCustomSection(ownerId: string, sectionId: string) {
+  const section = await findOwnedSection(ownerId, sectionId);
+  if (!section) return false;
+  return deleteCustomSection(sectionId);
+}
+
+export async function listTutorCustomLessonsPaged(
+  ownerId: string,
+  input?: {
+    sectionId?: string;
+    take?: number;
+    skip?: number;
+  },
+): Promise<PagedResult<CustomLessonRecord>> {
+  const take = clampTake(input?.take, 400, 1000);
+  const skip = clampSkip(input?.skip);
+  const where: Prisma.CustomLessonWhereInput = {
+    sectionId: input?.sectionId,
+    section: { course: { ownerId } },
+  };
+
+  const [rows, total] = await Promise.all([
+    prisma.customLesson.findMany({
+      where,
+      orderBy: { createdAt: "asc" },
+      take,
+      skip,
+    }),
+    prisma.customLesson.count({ where }),
+  ]);
+
+  return {
+    rows: rows.map((lesson) => ({
+      id: lesson.id,
+      sectionId: lesson.sectionId,
+      title: lesson.title,
+      description: lesson.description,
+      videoUrl: lesson.videoUrl,
+      createdAt: lesson.createdAt.toISOString(),
+    })),
+    total,
+    take,
+    skip,
+  };
+}
+
+export async function createTutorCustomLesson(
+  ownerId: string,
+  input: {
+    sectionId: string;
+    title: string;
+    description: string;
+    videoUrl: string;
+  },
+) {
+  const section = await findOwnedSection(ownerId, input.sectionId);
+  if (!section) return null;
+  return createCustomLesson(input);
+}
+
+export async function updateTutorCustomLesson(
+  ownerId: string,
+  lessonId: string,
+  input: { title?: string; description?: string; videoUrl?: string },
+) {
+  const lesson = await findOwnedLesson(ownerId, lessonId);
+  if (!lesson) return null;
+  return updateCustomLesson(lessonId, input);
+}
+
+export async function deleteTutorCustomLesson(ownerId: string, lessonId: string) {
+  const lesson = await findOwnedLesson(ownerId, lessonId);
+  if (!lesson) return false;
+  return deleteCustomLesson(lessonId);
+}
+
+export async function listTutorCustomTasksPaged(
+  ownerId: string,
+  input?: {
+    lessonId?: string;
+    status?: CustomTaskRecord["status"];
+    take?: number;
+    skip?: number;
+  },
+): Promise<PagedResult<CustomTaskRecord>> {
+  const take = clampTake(input?.take, 500, 1200);
+  const skip = clampSkip(input?.skip);
+  const where: Prisma.CustomTaskWhereInput = {
+    lessonId: input?.lessonId,
+    lesson: { section: { course: { ownerId } } },
+    status:
+      input?.status === "archived"
+        ? "ARCHIVED"
+        : input?.status === "unpublished"
+          ? "UNPUBLISHED"
+          : input?.status === "published"
+            ? "PUBLISHED"
+            : undefined,
+  };
+
+  const [rows, total] = await Promise.all([
+    prisma.customTask.findMany({
+      where,
+      orderBy: { createdAt: "asc" },
+      take,
+      skip,
+    }),
+    prisma.customTask.count({ where }),
+  ]);
+
+  return {
+    rows: rows.map(toTaskRecord),
+    total,
+    take,
+    skip,
+  };
+}
+
+export async function createTutorCustomTask(
+  ownerId: string,
+  input: {
+    lessonId: string;
+    type: "numeric" | "choice";
+    status?: "published" | "unpublished" | "archived";
+    question: string;
+    options?: string[] | null;
+    answer: string;
+    solution: string;
+    difficulty?: number;
+    topicTags?: string[];
+    exemplarSolution?: string | null;
+    evaluationCriteria?: string[];
+  },
+) {
+  const lesson = await findOwnedLesson(ownerId, input.lessonId);
+  if (!lesson) return null;
+  return createCustomTask(input);
+}
+
+export async function updateTutorCustomTask(
+  ownerId: string,
+  taskId: string,
+  input: {
+    type?: "numeric" | "choice";
+    status?: "published" | "unpublished" | "archived";
+    question?: string;
+    options?: string[] | null;
+    answer?: string;
+    solution?: string;
+    lessonId?: string;
+    difficulty?: number;
+    topicTags?: string[];
+    exemplarSolution?: string | null;
+    evaluationCriteria?: string[];
+  },
+) {
+  const existing = await findOwnedTask(ownerId, taskId);
+  if (!existing) return null;
+  if (input.lessonId) {
+    const targetLesson = await findOwnedLesson(ownerId, input.lessonId);
+    if (!targetLesson) return null;
+  }
+  return updateCustomTask(taskId, input);
+}
+
+export async function deleteTutorCustomTask(ownerId: string, taskId: string) {
+  const task = await findOwnedTask(ownerId, taskId);
+  if (!task) return false;
+  return deleteCustomTask(taskId);
+}
+
+export async function getTutorLessonKnowledge(ownerId: string, lessonId: string) {
+  const lesson = await findOwnedLesson(ownerId, lessonId);
+  if (!lesson) return null;
+  return getLessonKnowledge(lessonId);
+}
+
+export async function upsertTutorLessonKnowledge(
+  ownerId: string,
+  input: {
+    lessonId: string;
+    originalName: string;
+    mimeType: string;
+    storagePath: string;
+    extractedText: string;
+    summary?: string | null;
+    pageCount?: number | null;
+    textChars?: number;
+  },
+) {
+  const lesson = await findOwnedLesson(ownerId, input.lessonId);
+  if (!lesson) return null;
+  return upsertLessonKnowledge(input);
+}
+
+export async function deleteTutorLessonKnowledge(ownerId: string, lessonId: string) {
+  const lesson = await findOwnedLesson(ownerId, lessonId);
+  if (!lesson) return false;
+  const row = await prisma.lessonKnowledge.deleteMany({
+    where: { lessonId },
+  });
+  return row.count > 0;
+}
+
 export async function listPosts() {
   const posts = await prisma.post.findMany({
     orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
@@ -2105,14 +2652,21 @@ export async function createAnalyticsEvent(input: {
 export async function listAnalyticsEvents(input?: {
   userId?: string;
   eventName?: AnalyticsEventName;
+  eventNames?: AnalyticsEventName[];
   from?: Date;
   to?: Date;
   take?: number;
   skip?: number;
+  sortDir?: "asc" | "desc";
 }) {
   const where: Prisma.AnalyticsEventWhereInput = {
     userId: input?.userId,
-    eventName: input?.eventName,
+    eventName:
+      input?.eventNames && input.eventNames.length > 0
+        ? {
+            in: input.eventNames,
+          }
+        : input?.eventName,
     createdAt: {
       gte: input?.from,
       lte: input?.to,
@@ -2122,7 +2676,7 @@ export async function listAnalyticsEvents(input?: {
   const [rows, total] = await Promise.all([
     prisma.analyticsEvent.findMany({
       where,
-      orderBy: { createdAt: "desc" },
+      orderBy: { createdAt: input?.sortDir ?? "desc" },
       take: Math.max(1, Math.min(input?.take ?? 100, 500)),
       skip: Math.max(0, input?.skip ?? 0),
     }),
@@ -3062,6 +3616,19 @@ export async function updatePaymentProviderReference(input: {
   return toPaymentRecord(row);
 }
 
+export async function updatePaymentMetadata(input: {
+  checkoutToken: string;
+  metadata: string | null;
+}) {
+  const row = await prisma.paymentIntent.update({
+    where: { checkoutToken: input.checkoutToken },
+    data: {
+      metadata: input.metadata,
+    },
+  });
+  return toPaymentRecord(row);
+}
+
 function mapStatus(status: PaymentIntentRecord["status"]) {
   return status === "created"
     ? "CREATED"
@@ -3322,6 +3889,7 @@ export async function listWalletTransactions(input: {
   operationType?: WalletOperationTypeRecord;
   take?: number;
   skip?: number;
+  sortDir?: "asc" | "desc";
 }) {
   const where: Prisma.WalletTransactionWhereInput = {
     userId: input.userId,
@@ -3332,7 +3900,7 @@ export async function listWalletTransactions(input: {
   const [rows, total] = await Promise.all([
     prisma.walletTransaction.findMany({
       where,
-      orderBy: { createdAt: "desc" },
+      orderBy: { createdAt: input.sortDir ?? "desc" },
       take: Math.max(1, Math.min(input.take ?? 50, 500)),
       skip: Math.max(0, input.skip ?? 0),
     }),
@@ -3614,6 +4182,168 @@ export async function listAdminWalletTransactions(input?: {
   };
 }
 
+export async function listAdminLoyaltyAccounts(input?: {
+  userId?: string;
+  userEmail?: string;
+  take?: number;
+  skip?: number;
+}) {
+  const where: Prisma.LoyaltyAccountWhereInput = {
+    userId: input?.userId,
+    user: input?.userEmail
+      ? {
+          email: {
+            contains: input.userEmail.toLowerCase(),
+            mode: "insensitive",
+          },
+        }
+      : undefined,
+  };
+
+  const [rows, total] = await Promise.all([
+    prisma.loyaltyAccount.findMany({
+      where,
+      include: {
+        user: { select: { email: true } },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: Math.max(1, Math.min(input?.take ?? 100, 500)),
+      skip: Math.max(0, input?.skip ?? 0),
+    }),
+    prisma.loyaltyAccount.count({ where }),
+  ]);
+
+  return {
+    rows: rows.map((row) => ({
+      ...toLoyaltyAccountRecord(row),
+      userEmail: row.user.email,
+    })) satisfies AdminLoyaltyAccountRecord[],
+    total,
+  };
+}
+
+export async function listAdminLoyaltyTransactions(input?: {
+  userId?: string;
+  userEmail?: string;
+  direction?: LoyaltyDirectionRecord;
+  reason?: LoyaltyReasonRecord;
+  from?: Date;
+  to?: Date;
+  take?: number;
+  skip?: number;
+}) {
+  const where: Prisma.LoyaltyTransactionWhereInput = {
+    userId: input?.userId,
+    direction: input?.direction ? (input.direction === "debit" ? "DEBIT" : "CREDIT") : undefined,
+    reason: input?.reason
+      ? input.reason === "course_completion"
+        ? "COURSE_COMPLETION"
+        : input.reason === "discount_redeem"
+          ? "DISCOUNT_REDEEM"
+          : input.reason === "discount_rollback"
+            ? "DISCOUNT_ROLLBACK"
+            : input.reason === "expiration"
+              ? "EXPIRATION"
+              : "MANUAL_ADJUSTMENT"
+      : undefined,
+    createdAt: {
+      gte: input?.from,
+      lte: input?.to,
+    },
+    user: input?.userEmail
+      ? {
+          email: {
+            contains: input.userEmail.toLowerCase(),
+            mode: "insensitive",
+          },
+        }
+      : undefined,
+  };
+
+  const [rows, total] = await Promise.all([
+    prisma.loyaltyTransaction.findMany({
+      where,
+      include: {
+        user: { select: { email: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: Math.max(1, Math.min(input?.take ?? 100, 500)),
+      skip: Math.max(0, input?.skip ?? 0),
+    }),
+    prisma.loyaltyTransaction.count({ where }),
+  ]);
+
+  return {
+    rows: rows.map((row) => ({
+      ...toLoyaltyTransactionRecord(row),
+      userEmail: row.user.email,
+    })) satisfies AdminLoyaltyTransactionRecord[],
+    total,
+  };
+}
+
+export async function listAdminAuditLogs(input?: {
+  adminUserId?: string;
+  entityType?: string;
+  entityId?: string;
+  from?: Date;
+  to?: Date;
+  take?: number;
+  skip?: number;
+}) {
+  const where: Prisma.AdminAuditLogWhereInput = {
+    adminUserId: input?.adminUserId,
+    entityType: input?.entityType,
+    entityId: input?.entityId,
+    createdAt: {
+      gte: input?.from,
+      lte: input?.to,
+    },
+  };
+
+  const [rows, total] = await Promise.all([
+    prisma.adminAuditLog.findMany({
+      where,
+      include: {
+        adminUser: { select: { email: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: Math.max(1, Math.min(input?.take ?? 100, 500)),
+      skip: Math.max(0, input?.skip ?? 0),
+    }),
+    prisma.adminAuditLog.count({ where }),
+  ]);
+
+  return {
+    rows: rows.map(toAdminAuditLogRecord),
+    total,
+  };
+}
+
+export async function findAdminAuditLogByIdempotencyKey(input: {
+  action: string;
+  entityType: string;
+  entityId?: string;
+  idempotencyKey: string;
+}) {
+  const row = await prisma.adminAuditLog.findFirst({
+    where: {
+      action: input.action,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      metadata: {
+        path: ["idempotencyKey"],
+        equals: input.idempotencyKey,
+      },
+    },
+    include: {
+      adminUser: { select: { email: true } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  return row ? toAdminAuditLogRecord(row) : null;
+}
+
 export async function createUserUpload(input: {
   userId: string;
   originalName: string;
@@ -3837,6 +4567,10 @@ export async function listAiSolutionAnalyses(input?: {
   lessonId?: string;
   mode?: AiAnalysisMode;
   status?: AiAnalysisStatus;
+  from?: Date;
+  to?: Date;
+  sortBy?: "createdAt" | "latencyMs" | "status";
+  sortDir?: "asc" | "desc";
   take?: number;
   skip?: number;
 }) {
@@ -3848,10 +4582,16 @@ export async function listAiSolutionAnalyses(input?: {
     lessonId: input?.lessonId,
     mode: input?.mode,
     status: input?.status,
+    createdAt: {
+      gte: input?.from,
+      lte: input?.to,
+    },
   };
   const rows = await prisma.aiSolutionAnalysis.findMany({
     where,
-    orderBy: { createdAt: "desc" },
+    orderBy: {
+      [input?.sortBy ?? "createdAt"]: input?.sortDir ?? "desc",
+    },
     take,
     skip,
   });
@@ -3865,6 +4605,10 @@ export async function listAiSolutionAnalysesPaged(input?: {
   lessonId?: string;
   mode?: AiAnalysisMode;
   status?: AiAnalysisStatus;
+  from?: Date;
+  to?: Date;
+  sortBy?: "createdAt" | "latencyMs" | "status";
+  sortDir?: "asc" | "desc";
   take?: number;
   skip?: number;
 }): Promise<PagedResult<AiSolutionAnalysisRecord>> {
@@ -3876,11 +4620,17 @@ export async function listAiSolutionAnalysesPaged(input?: {
     lessonId: input?.lessonId,
     mode: input?.mode,
     status: input?.status,
+    createdAt: {
+      gte: input?.from,
+      lte: input?.to,
+    },
   };
   const [rows, total] = await Promise.all([
     prisma.aiSolutionAnalysis.findMany({
       where,
-      orderBy: { createdAt: "desc" },
+      orderBy: {
+        [input?.sortBy ?? "createdAt"]: input?.sortDir ?? "desc",
+      },
       take,
       skip,
     }),

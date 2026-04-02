@@ -108,6 +108,11 @@ describe("POST /api/billing/create-checkout", () => {
       checkoutUrl: null,
       fallbackUsed: false,
       planCourseIds: ["math-ege-2026"],
+      loyalty: {
+        applied: true,
+        discountCents: 5000,
+        pointsSpent: 5000,
+      },
     });
 
     const response = await POST(
@@ -121,6 +126,7 @@ describe("POST /api/billing/create-checkout", () => {
 
     expect(response.status).toBe(200);
     expect(data.payment.status).toBe("succeeded");
+    expect(data.loyalty.discountCents).toBe(5000);
     expect(mocks.createAnalyticsEventMock).toHaveBeenCalledWith(
       expect.objectContaining({ eventName: "checkout_created" }),
     );
@@ -129,4 +135,3 @@ describe("POST /api/billing/create-checkout", () => {
     );
   });
 });
-

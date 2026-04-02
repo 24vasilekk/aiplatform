@@ -34,8 +34,10 @@ function getStore() {
   return globalWithStore.__egeRateLimitStore;
 }
 
-export function getClientIpFromHeaders(headers: Headers) {
-  const forwardedFor = headers.get("x-forwarded-for");
+type HeadersLike = Pick<Headers, "get"> | null | undefined;
+
+export function getClientIpFromHeaders(headers: HeadersLike) {
+  const forwardedFor = headers?.get("x-forwarded-for");
   if (forwardedFor) {
     const candidate = forwardedFor
       .split(",")
@@ -44,10 +46,10 @@ export function getClientIpFromHeaders(headers: Headers) {
     if (candidate) return candidate;
   }
 
-  const realIp = headers.get("x-real-ip")?.trim();
+  const realIp = headers?.get("x-real-ip")?.trim();
   if (realIp) return realIp;
 
-  const cfIp = headers.get("cf-connecting-ip")?.trim();
+  const cfIp = headers?.get("cf-connecting-ip")?.trim();
   if (cfIp) return cfIp;
 
   return "unknown";

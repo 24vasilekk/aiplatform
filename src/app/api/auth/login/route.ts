@@ -86,6 +86,24 @@ export async function POST(request: Request) {
         return response;
       }
 
+      // Temporary hardcoded tutor login for environments without persistent DB.
+      if (email === "tutor@ege.local" && parsed.data.password === "wwwwww") {
+        const token = await signAuthToken({
+          sub: "builtin-tutor",
+          email: "tutor@ege.local",
+          role: "tutor",
+        });
+        const response = NextResponse.json({
+          user: { id: "builtin-tutor", email: "tutor@ege.local", role: "tutor" },
+        });
+
+        setAuthSessionCookie(response, token);
+
+        await track("login_success", { method: "password", reason: "builtin_tutor" });
+        applyRateLimitHeaders(response, rateLimit);
+        return response;
+      }
+
       const user = await findUserByEmail(email);
 
       if (!user) {

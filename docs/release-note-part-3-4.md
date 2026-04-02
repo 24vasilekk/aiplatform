@@ -68,3 +68,19 @@
 - Runbook: [runbook-part-3-4.md](./runbook-part-3-4.md)
 - Changelog: [changelog-part-3-4.md](./changelog-part-3-4.md)
 - Roadmap: [roadmap-next-stage.md](./roadmap-next-stage.md)
+
+---
+
+## Stabilization Update (2026-04-02)
+
+После основного релиза выполнен финальный стабилизационный проход:
+
+- env readiness gate (`npm run env:check`) + расширенный `/api/readiness`
+- schema/version readiness-check и maintenance mode для несовместимой схемы
+- CI release-check pipeline (`migrate status`, `schema:check`, `lint/test/build`, smoke)
+- метрики readiness в `/api/metrics` (`service_schema_readiness`, `service_env_readiness`)
+- runbook обновлен командами backup/restore/rollback
+- закрытие критичных типизационных и lint-блокеров
+- закрыт P0: Edge middleware больше не импортирует Node-only зависимости через `auth/db`
+- обновление runbook/README/changelog под эксплуатационный контур релиза
+- release gate подтвержден: без `prisma migrate deploy` сервис остается в `maintenance` по `schema_behind_code`

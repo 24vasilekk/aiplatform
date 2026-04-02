@@ -64,7 +64,7 @@ export async function POST(request: Request) {
   }
 
   const passwordHash = await bcrypt.hash(parsed.data.password, 10);
-  const role = email === "admin@ege.local" ? "admin" : "student";
+  const role = email === "admin@ege.local" ? "admin" : email.endsWith("@tutor.local") ? "tutor" : "student";
   const user = await createUser({ email, passwordHash, role });
   await createAnalyticsEvent({
     eventName: "registration_success",

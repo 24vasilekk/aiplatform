@@ -5,6 +5,8 @@ import { getWalletSnapshot, hasCourseAccess, type WalletSnapshotRecord } from "@
 import { listAllCourses } from "@/lib/course-catalog";
 import { buildUserProgressSnapshot, type UserProgressSnapshot } from "@/lib/progress";
 import { WalletPanel } from "@/components/wallet-panel";
+import { LoyaltyPanel } from "@/components/loyalty-panel";
+import { getLoyaltyDiscountQuote, getLoyaltySnapshot, type LoyaltySnapshot } from "@/lib/loyalty";
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
@@ -58,23 +60,103 @@ export default async function DashboardPage() {
     degradedMode = true;
   }
 
+  const fallbackLoyaltySnapshot: LoyaltySnapshot = {
+    userId: user.id,
+    pointsBalance: 0,
+    lifetimeEarnedPoints: 0,
+    lifetimeRedeemedPoints: 0,
+    nextPointsExpirationAt: null,
+    nextExpiringPoints: 0,
+    rules: {
+      pointsPerCourseCompletion: 1200,
+      pointsLifetimeDays: 180,
+      discountValuePerPointCents: 1,
+      maxDiscountPercent: 30,
+      minOrderAmountCents: 50_000,
+      minPayableAmountCents: 10_000,
+      maxPointsPerOrder: 70_000,
+    },
+    transactions: [],
+  };
+
+  let loyaltySnapshot = fallbackLoyaltySnapshot;
+  let loyaltyQuotes: {
+    math_only: Awaited<ReturnType<typeof getLoyaltyDiscountQuote>>;
+    bundle_2: Awaited<ReturnType<typeof getLoyaltyDiscountQuote>>;
+    all_access: Awaited<ReturnType<typeof getLoyaltyDiscountQuote>>;
+  };
+  try {
+    loyaltySnapshot = await getLoyaltySnapshot(user.id, 30);
+    const [mathOnly, bundle2, allAccess] = await Promise.all([
+      getLoyaltyDiscountQuote({ userId: user.id, orderAmountCents: 99_000 }),
+      getLoyaltyDiscountQuote({ userId: user.id, orderAmountCents: 158_400 }),
+      getLoyaltyDiscountQuote({ userId: user.id, orderAmountCents: 149_000 }),
+    ]);
+    loyaltyQuotes = {
+      math_only: mathOnly,
+      bundle_2: bundle2,
+      all_access: allAccess,
+    };
+  } catch {
+    degradedMode = true;
+    loyaltySnapshot = fallbackLoyaltySnapshot;
+    loyaltyQuotes = {
+      math_only: await getLoyaltyDiscountQuote({ userId: user.id, orderAmountCents: 99_000 }).catch(() => ({
+        orderAmountCents: 99_000,
+        requestedPoints: null,
+        availablePoints: 0,
+        maxDiscountCents: 0,
+        discountCents: 0,
+        pointsToSpend: 0,
+        finalAmountCents: 99_000,
+        reason: "NO_POINTS_AVAILABLE",
+        rules: fallbackLoyaltySnapshot.rules,
+      })),
+      bundle_2: await getLoyaltyDiscountQuote({ userId: user.id, orderAmountCents: 158_400 }).catch(() => ({
+        orderAmountCents: 158_400,
+        requestedPoints: null,
+        availablePoints: 0,
+        maxDiscountCents: 0,
+        discountCents: 0,
+        pointsToSpend: 0,
+        finalAmountCents: 158_400,
+        reason: "NO_POINTS_AVAILABLE",
+        rules: fallbackLoyaltySnapshot.rules,
+      })),
+      all_access: await getLoyaltyDiscountQuote({ userId: user.id, orderAmountCents: 149_000 }).catch(() => ({
+        orderAmountCents: 149_000,
+        requestedPoints: null,
+        availablePoints: 0,
+        maxDiscountCents: 0,
+        discountCents: 0,
+        pointsToSpend: 0,
+        finalAmountCents: 149_000,
+        reason: "NO_POINTS_AVAILABLE",
+        rules: fallbackLoyaltySnapshot.rules,
+      })),
+    };
+  }
+
   const paidSnapshot = await getDemoPaidAccessSnapshot();
 
   const courses = await listAllCourses();
-  const items = await Promise.all(
+  const itemsWithFallback = await Promise.all(
     courses.map(async (course) => {
       if (paidSnapshot.all || paidSnapshot.courseIds.includes(course.id)) {
-        return { ...course, hasAccess: true };
+        return { item: { ...course, hasAccess: true }, usedFallback: false };
       }
       try {
         const access = await hasCourseAccess(user.id, course.id);
-        return { ...course, hasAccess: access };
+        return { item: { ...course, hasAccess: access }, usedFallback: false };
       } catch {
-        degradedMode = true;
-        return { ...course, hasAccess: false };
+        return { item: { ...course, hasAccess: false }, usedFallback: true };
       }
     }),
   );
+  if (itemsWithFallback.some((row) => row.usedFallback)) {
+    degradedMode = true;
+  }
+  const items = itemsWithFallback.map((row) => row.item);
   const courseProgressById = new Map(progress.courses.map((course) => [course.courseId, course] as const));
 
   return (
@@ -91,6 +173,10 @@ export default async function DashboardPage() {
       </p>
 
       <WalletPanel initialSnapshot={walletSnapshot} />
+      <LoyaltyPanel
+        initialSnapshot={loyaltySnapshot}
+        initialQuotes={loyaltyQuotes}
+      />
 
       <div className="grid gap-4 md:grid-cols-2">
         {items.map((course) => {
