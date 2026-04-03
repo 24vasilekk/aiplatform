@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuthToken } from "@/lib/auth";
 import { authCookieName } from "@/lib/auth-constants";
-import { findUserById, type UserRole } from "@/lib/db";
+import { ensureLocalRoleUser, findUserById, type UserRole } from "@/lib/db";
 import {
   createSchemaMaintenanceApiResponse,
   getSchemaReadinessSnapshot,
@@ -27,9 +27,10 @@ export async function requireUser(request: NextRequest) {
       payload.email === "admin@ege.local" &&
       payload.role === "admin"
     ) {
+      const ensured = await ensureLocalRoleUser({ email: "admin@ege.local", role: "admin" }).catch(() => null);
       return {
         user: {
-          id: "builtin-admin",
+          id: ensured?.id ?? "builtin-admin",
           email: "admin@ege.local",
           role: "admin" as const,
         },
@@ -42,9 +43,10 @@ export async function requireUser(request: NextRequest) {
       payload.email === "tutor@ege.local" &&
       payload.role === "tutor"
     ) {
+      const ensured = await ensureLocalRoleUser({ email: "tutor@ege.local", role: "tutor" }).catch(() => null);
       return {
         user: {
-          id: "builtin-tutor",
+          id: ensured?.id ?? "builtin-tutor",
           email: "tutor@ege.local",
           role: "tutor" as const,
         },

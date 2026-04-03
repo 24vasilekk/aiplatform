@@ -27,6 +27,13 @@ type AdminWalletTransaction = {
   createdAt: string;
 };
 
+type AdminUserOption = {
+  id: string;
+  email: string;
+  role: "student" | "tutor" | "admin";
+  createdAt: string;
+};
+
 function toRub(cents: number, currency: string) {
   try {
     return new Intl.NumberFormat("ru-RU", {
@@ -47,9 +54,11 @@ function makeIdempotencyKey(prefix: string) {
 export function AdminWalletManager() {
   const [query, setQuery] = useState("");
   const [userId, setUserId] = useState("");
+  const [userEmail, setUserEmail] = useState("");
   const [amountRub, setAmountRub] = useState("500");
   const [reason, setReason] = useState("");
   const [direction, setDirection] = useState<"credit" | "debit">("credit");
+  const [users, setUsers] = useState<AdminUserOption[]>([]);
   const [wallets, setWallets] = useState<AdminWallet[]>([]);
   const [transactions, setTransactions] = useState<AdminWalletTransaction[]>([]);
   const [loading, setLoading] = useState(false);
@@ -67,6 +76,7 @@ export function AdminWalletManager() {
     try {
       const response = await fetch(`/api/admin/wallets?${params.toString()}`, { cache: "no-store" });
       const data = (await response.json().catch(() => ({}))) as {
+        users?: AdminUserOption[];
         wallets?: AdminWallet[];
         transactions?: AdminWalletTransaction[];
       };
@@ -76,6 +86,7 @@ export function AdminWalletManager() {
         return;
       }
 
+      setUsers(data.users ?? []);
       setWallets(data.wallets ?? []);
       setTransactions(data.transactions ?? []);
     } finally {
@@ -89,8 +100,10 @@ export function AdminWalletManager() {
 
   async function applyAdjustment() {
     const amount = Number(amountRub);
-    if (!userId.trim()) {
-      setStatus("Укажите userId для операции.");
+    const targetUserId = userId.trim();
+    const targetUserEmail = userEmail.trim().toLowerCase();
+    if (!targetUserId && !targetUserEmail) {
+      setStatus("Укажите userId или userEmail получателя.");
       return;
     }
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -108,7 +121,8 @@ export function AdminWalletManager() {
           "x-idempotency-key": makeIdempotencyKey("admin_wallet"),
         },
         body: JSON.stringify({
-          userId: userId.trim(),
+          userId: targetUserId || undefined,
+          userEmail: targetUserEmail || undefined,
           direction,
           amountRub: amount,
           reason: reason.trim() || undefined,
@@ -146,13 +160,20 @@ export function AdminWalletManager() {
 
       <div className="rounded-md border border-slate-200 bg-white p-3">
         <p className="text-sm font-medium">Ручная операция</p>
-        <div className="mt-2 grid gap-2 md:grid-cols-4">
+        <div className="mt-2 grid gap-2 md:grid-cols-5">
           <input
             type="text"
             className="w-full"
-            placeholder="userId"
+            placeholder="userId (опционально)"
             value={userId}
             onChange={(event) => setUserId(event.target.value)}
+          />
+          <input
+            type="email"
+            className="w-full"
+            placeholder="userEmail (опционально)"
+            value={userEmail}
+            onChange={(event) => setUserEmail(event.target.value)}
           />
           <input
             type="number"
@@ -185,6 +206,41 @@ export function AdminWalletManager() {
       </div>
 
       {status ? <p className="text-sm text-slate-700">{status}</p> : null}
+
+      <div>
+        <p className="text-sm font-medium">Пользователи</p>
+        {users.length === 0 ? (
+          <p className="text-sm text-slate-500">Пользователи не найдены. Используйте поиск по email выше.</p>
+        ) : (
+          <ul className="mt-2 space-y-2 text-xs">
+            {users.map((user) => (
+              <li key={user.id} className="rounded border border-slate-200 bg-slate-50 p-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="font-medium">
+                      {user.email} · {user.role}
+                    </p>
+                    <p className="text-slate-600">
+                      userId: <code>{user.id}</code>
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-ghost px-3 py-1.5 text-xs"
+                    onClick={() => {
+                      setUserId(user.id);
+                      setUserEmail(user.email);
+                      setStatus(`Выбран пользователь ${user.email}`);
+                    }}
+                  >
+                    Выбрать
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
 
       <div>
         <p className="text-sm font-medium">Кошельки</p>

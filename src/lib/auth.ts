@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { jwtVerify, SignJWT } from "jose";
-import { findUserById, type UserRole } from "@/lib/db";
+import { ensureLocalRoleUser, findUserById, type UserRole } from "@/lib/db";
 import { AUTH_COOKIE, authCookieName } from "@/lib/auth-constants";
 
 type AuthPayload = {
@@ -71,8 +71,9 @@ export async function getCurrentUser() {
       payload.email === "admin@ege.local" &&
       payload.role === "admin"
     ) {
+      const ensured = await ensureLocalRoleUser({ email: "admin@ege.local", role: "admin" }).catch(() => null);
       return {
-        id: "builtin-admin",
+        id: ensured?.id ?? "builtin-admin",
         email: "admin@ege.local",
         role: "admin" as const,
       };
@@ -83,8 +84,9 @@ export async function getCurrentUser() {
       payload.email === "tutor@ege.local" &&
       payload.role === "tutor"
     ) {
+      const ensured = await ensureLocalRoleUser({ email: "tutor@ege.local", role: "tutor" }).catch(() => null);
       return {
-        id: "builtin-tutor",
+        id: ensured?.id ?? "builtin-tutor",
         email: "tutor@ege.local",
         role: "tutor" as const,
       };

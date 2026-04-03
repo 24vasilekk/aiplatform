@@ -5,19 +5,25 @@ import { requireUser } from "@/lib/api-auth";
 import {
   adjustWalletBalance,
   createAdminAuditLog,
+  findUserByEmail,
   getWalletSnapshot,
   isInsufficientFundsError,
   listAdminWallets,
   listAdminWalletTransactions,
+  listUsersPaged,
 } from "@/lib/db";
 import { observeRequest } from "@/lib/observability";
 
 const adjustmentSchema = z.object({
-  userId: z.string().trim().min(3),
+  userId: z.string().trim().min(3).optional(),
+  userEmail: z.email().trim().max(254).optional(),
   direction: z.enum(["credit", "debit"]),
   amountRub: z.number().positive().max(500_000),
   reason: z.string().trim().max(300).optional(),
   idempotencyKey: z.string().trim().min(8).max(120).optional(),
+}).refine((value) => Boolean(value.userId?.trim() || value.userEmail?.trim()), {
+  message: "Укажите userId или userEmail",
+  path: ["userId"],
 });
 
 function parseTake(value: string | null, fallback = 100, max = 500) {
@@ -72,6 +78,11 @@ export async function GET(request: NextRequest) {
         take,
         skip: 0,
       });
+      const users = await listUsersPaged({
+        query: q || undefined,
+        take: Math.min(100, take),
+        skip: 0,
+      });
 
       const transactions = await listAdminWalletTransactions({
         userId,
@@ -85,6 +96,13 @@ export async function GET(request: NextRequest) {
       });
 
       return NextResponse.json({
+        users: users.rows.map((user) => ({
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          createdAt: user.createdAt,
+        })),
+        usersTotal: users.total,
         wallets: wallets.rows,
         walletsTotal: wallets.total,
         transactions: transactions.rows,
@@ -110,6 +128,18 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Неверные данные операции" }, { status: 400 });
       }
 
+      let targetUserId = parsed.data.userId?.trim() ?? "";
+      if (!targetUserId && parsed.data.userEmail) {
+        const userByEmail = await findUserByEmail(parsed.data.userEmail);
+        if (!userByEmail) {
+          return NextResponse.json({ error: "Пользователь с таким email не найден" }, { status: 404 });
+        }
+        targetUserId = userByEmail.id;
+      }
+      if (!targetUserId) {
+        return NextResponse.json({ error: "Укажите получателя операции" }, { status: 400 });
+      }
+
       const idempotencyKey =
         parsed.data.idempotencyKey ??
         request.headers.get("x-idempotency-key")?.trim() ??
@@ -117,13 +147,14 @@ export async function POST(request: NextRequest) {
 
       try {
         await adjustWalletBalance({
-          userId: parsed.data.userId,
+          userId: targetUserId,
           direction: parsed.data.direction,
           amountCents: toCents(parsed.data.amountRub),
           idempotencyKey,
           metadata: {
             reason: parsed.data.reason ?? null,
             adminUserId: auth.user.id,
+            userEmail: parsed.data.userEmail ?? null,
           },
         });
       } catch (error) {
@@ -136,16 +167,17 @@ export async function POST(request: NextRequest) {
         adminUserId: auth.user.id,
         action: "adjust_wallet_balance",
         entityType: "wallet",
-        entityId: parsed.data.userId,
+        entityId: targetUserId,
         metadata: {
           direction: parsed.data.direction,
           amountRub: parsed.data.amountRub,
           reason: parsed.data.reason ?? null,
           idempotencyKey,
+          userEmail: parsed.data.userEmail ?? null,
         },
       });
 
-      const snapshot = await getWalletSnapshot(parsed.data.userId, 30);
+      const snapshot = await getWalletSnapshot(targetUserId, 30);
       return NextResponse.json({
         ok: true,
         wallet: snapshot.wallet,

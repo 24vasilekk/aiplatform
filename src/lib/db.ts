@@ -1101,6 +1101,32 @@ export async function updateUserRole(userId: string, role: UserRole) {
   return toUserRecord(row);
 }
 
+export async function ensureLocalRoleUser(input: { email: string; role: UserRole }) {
+  const normalizedEmail = input.email.toLowerCase().trim();
+  const requiredRole = mapUserRole(input.role);
+  const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+
+  if (existing) {
+    if (existing.role === requiredRole) {
+      return toUserRecord(existing);
+    }
+    const updated = await prisma.user.update({
+      where: { id: existing.id },
+      data: { role: requiredRole },
+    });
+    return toUserRecord(updated);
+  }
+
+  const created = await prisma.user.create({
+    data: {
+      email: normalizedEmail,
+      passwordHash: null,
+      role: requiredRole,
+    },
+  });
+  return toUserRecord(created);
+}
+
 export async function createUser(input: { email: string; passwordHash: string; role?: UserRole }) {
   const role = mapUserRole(input.role ?? inferRoleByEmail(input.email));
   const user = await prisma.user.create({
