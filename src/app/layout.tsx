@@ -6,7 +6,7 @@ import "katex/dist/katex.min.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "EGE AI Platform MVP",
+  title: "Репетитор Бутакова",
   description: "MVP платформа подготовки к ЕГЭ по математике и физике",
 };
 
@@ -15,7 +15,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser().catch(() => null);
 
   return (
     <html lang="ru" className="h-full antialiased">

@@ -11,20 +11,20 @@ function buildAbsoluteUrl(path: string) {
 }
 
 export const metadata: Metadata = {
-  title: "Блог | EGE AI Platform",
+  title: "Блог | Репетитор Бутакова",
   description: "Разборы задач, стратегии подготовки и полезные материалы для ЕГЭ.",
   alternates: {
     canonical: buildAbsoluteUrl("/blog"),
   },
   openGraph: {
-    title: "Блог | EGE AI Platform",
+    title: "Блог | Репетитор Бутакова",
     description: "Разборы задач, стратегии подготовки и полезные материалы для ЕГЭ.",
     type: "website",
     url: buildAbsoluteUrl("/blog"),
   },
   twitter: {
     card: "summary",
-    title: "Блог | EGE AI Platform",
+    title: "Блог | Репетитор Бутакова",
     description: "Разборы задач, стратегии подготовки и полезные материалы для ЕГЭ.",
   },
 };

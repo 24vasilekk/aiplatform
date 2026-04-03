@@ -1,15 +1,13 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getCurrentUser, getDemoPaidAccessSnapshot } from "@/lib/auth";
+import { getCurrentUser, getDemoPaidAccessSnapshot, type DemoPaidAccessSnapshot } from "@/lib/auth";
 import { getWalletSnapshot, hasCourseAccess, type WalletSnapshotRecord } from "@/lib/db";
 import { listAllCourses } from "@/lib/course-catalog";
 import { buildUserProgressSnapshot, type UserProgressSnapshot } from "@/lib/progress";
-import { WalletPanel } from "@/components/wallet-panel";
-import { LoyaltyPanel } from "@/components/loyalty-panel";
 import { getLoyaltyDiscountQuote, getLoyaltySnapshot, type LoyaltySnapshot } from "@/lib/loyalty";
+import { StudentDashboardOverview } from "@/components/student-dashboard-overview";
 
 export default async function DashboardPage() {
-  const user = await getCurrentUser();
+  const user = await getCurrentUser().catch(() => null);
   if (!user) {
     redirect("/login");
   }
@@ -137,7 +135,10 @@ export default async function DashboardPage() {
     };
   }
 
-  const paidSnapshot = await getDemoPaidAccessSnapshot();
+  const paidSnapshot: DemoPaidAccessSnapshot = await getDemoPaidAccessSnapshot().catch(() => ({
+    all: false,
+    courseIds: [],
+  }));
 
   let courses: Awaited<ReturnType<typeof listAllCourses>> = [];
   try {
@@ -164,55 +165,30 @@ export default async function DashboardPage() {
   }
   const items = itemsWithFallback.map((row) => row.item);
   const courseProgressById = new Map(progress.courses.map((course) => [course.courseId, course] as const));
+  const courseCards = items.map((course) => {
+    const courseProgress = courseProgressById.get(course.id);
+    return {
+      id: course.id,
+      subject: course.subject,
+      title: course.title,
+      description: course.description,
+      hasAccess: course.hasAccess,
+      progressPercent: courseProgress?.percent ?? course.progress,
+      completedLessons: courseProgress?.completedLessons ?? 0,
+      totalLessons: courseProgress?.totalLessons ?? 0,
+    };
+  });
 
   return (
-    <section className="space-y-4">
-      <h1>Личный кабинет</h1>
-      <p className="text-sm text-slate-700">Пользователь: {user.email}</p>
-      {degradedMode ? (
-        <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-          Часть данных временно недоступна. Обычно это значит, что миграции БД еще не применены.
-        </p>
-      ) : null}
-      <p className="text-sm text-slate-700">
-        Прогресс: {progress.summary.percent}% ({progress.summary.completedLessons}/{progress.summary.totalLessons} уроков)
-      </p>
-
-      <WalletPanel initialSnapshot={walletSnapshot} />
-      <LoyaltyPanel
-        initialSnapshot={loyaltySnapshot}
-        initialQuotes={loyaltyQuotes}
-      />
-
-      <div className="grid gap-4 md:grid-cols-2">
-        {items.map((course) => {
-          const courseProgress = courseProgressById.get(course.id);
-          return (
-            <article key={course.id} className="card-soft card-soft-hover flex h-full flex-col p-6">
-              <div className="space-y-2">
-                <p className="text-xs uppercase tracking-wide text-sky-700">{course.subject}</p>
-                <h2>{course.title}</h2>
-                <p className="text-sm text-slate-700">{course.description}</p>
-              </div>
-              <p className="mt-4 text-sm">
-                Прогресс: {courseProgress?.percent ?? course.progress}% ({courseProgress?.completedLessons ?? 0}/
-                {courseProgress?.totalLessons ?? 0} уроков)
-              </p>
-              <div className="mt-auto pt-6">
-                {course.hasAccess ? (
-                  <Link href={`/courses/${course.id}`} className="btn-primary inline-flex w-fit">
-                    Открыть курс
-                  </Link>
-                ) : (
-                  <Link href="/pricing" className="btn-ghost inline-flex w-fit">
-                    Открыть доступ
-                  </Link>
-                )}
-              </div>
-            </article>
-          );
-        })}
-      </div>
-    </section>
+    <StudentDashboardOverview
+      userEmail={user.email}
+      degradedMode={degradedMode}
+      progressPercent={progress.summary.percent}
+      progressLessonsLabel={`${progress.summary.completedLessons}/${progress.summary.totalLessons} уроков`}
+      walletSnapshot={walletSnapshot}
+      loyaltySnapshot={loyaltySnapshot}
+      loyaltyQuotes={loyaltyQuotes}
+      courses={courseCards}
+    />
   );
 }

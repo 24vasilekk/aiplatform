@@ -58,7 +58,7 @@ export function TopNav({ initialRole = null }: { initialRole?: UserRole | null }
       <div className="mx-auto w-full max-w-6xl px-3 py-3 sm:px-4">
         <div className="flex items-center justify-between gap-3">
           <Link href="/" className="text-base font-medium tracking-[-0.01em] text-black">
-            EGE AI Platform
+            Репетитор Бутакова
           </Link>
 
           <div className="md:hidden">

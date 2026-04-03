@@ -240,7 +240,7 @@ async function createYooKassaPayment(input: {
         type: "redirect",
         return_url: `${getAppUrl()}/pricing?payment=return`,
       },
-      description: `EGE MVP: ${input.planId}`,
+      description: `Репетитор Бутакова: ${input.planId}`,
       metadata: {
         checkoutToken: input.payment.checkoutToken,
         paymentId: input.payment.id,

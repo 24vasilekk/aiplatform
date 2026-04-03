@@ -11,7 +11,7 @@ function getSmtpConfig() {
   const port = Number(process.env.SMTP_PORT ?? 587);
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
-  const from = process.env.SMTP_FROM ?? "EGE AI <no-reply@ege.local>";
+  const from = process.env.SMTP_FROM ?? "Репетитор Бутакова <no-reply@ege.local>";
 
   if (!host || !user || !pass) {
     return null;
@@ -46,7 +46,7 @@ export async function sendPasswordResetEmail(input: ResetEmailInput) {
   await transport.sendMail({
     from: config.from,
     to: input.to,
-    subject: "Восстановление пароля — EGE AI",
+    subject: "Восстановление пароля — Репетитор Бутакова",
     text: [
       "Вы запросили смену пароля.",
       `Ссылка: ${input.resetUrl}`,

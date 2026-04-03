@@ -39,7 +39,7 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
 
   if (!post) {
     return {
-      title: "Статья не найдена | EGE AI Platform",
+      title: "Статья не найдена | Репетитор Бутакова",
       description: "Запрошенная статья не найдена или еще не опубликована.",
     };
   }
@@ -48,7 +48,7 @@ export async function generateMetadata({ params }: BlogPostPageProps): Promise<M
   const image = normalizeImageUrl(post.coverImage);
 
   return {
-    title: `${post.title} | Блог EGE AI Platform`,
+    title: `${post.title} | Блог Репетитор Бутакова`,
     description: post.excerpt,
     alternates: {
       canonical,
@@ -106,11 +106,11 @@ export default async function BlogPostPage({ params }: BlogPostPageProps) {
     image: image ? [image] : undefined,
     author: {
       "@type": "Organization",
-      name: "EGE AI Platform",
+      name: "Репетитор Бутакова",
     },
     publisher: {
       "@type": "Organization",
-      name: "EGE AI Platform",
+      name: "Репетитор Бутакова",
     },
   };
 
