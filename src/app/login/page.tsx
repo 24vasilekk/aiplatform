@@ -41,7 +41,7 @@ export default async function LoginPage({
           <h2 className="mb-2 text-lg">Что внутри платформы</h2>
           <ul className="list-disc space-y-2 pl-5 text-sm text-slate-700">
             <li>Курсы с уроками и задачами по ЕГЭ</li>
-            <li>AI-помощник для разбора решений</li>
+            <li>Помощник для разбора решений</li>
             <li>Личный кабинет с прогрессом</li>
           </ul>
           <p className="form-helper mt-4">

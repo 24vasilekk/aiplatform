@@ -4,8 +4,8 @@ import { Card } from "@/components/ui";
 export default function Home() {
   return (
     <div className="grid gap-4 md:grid-cols-2">
-      <Card title="MVP платформы ЕГЭ">
-        <p className="mb-3">Рабочий MVP: регистрация, курсы, уроки с видео, задачи, AI-чат и демо-оплата.</p>
+      <Card title="Платформа подготовки к ЕГЭ">
+        <p className="mb-3">Регистрация, курсы, уроки с видео, задачи, чат с помощником и оплата доступа.</p>
         <div className="flex flex-wrap gap-2">
           <Link href="/register" className="btn-primary">
             Начать обучение
@@ -16,11 +16,11 @@ export default function Home() {
         </div>
       </Card>
 
-      <Card title="Демо-сценарий">
+      <Card title="Как начать">
         <ul className="list-disc space-y-1 pl-5">
-          <li>Регистрация пользователя открывает пробный доступ к математике</li>
-          <li>Оплата на странице `/pricing` открывает все курсы</li>
-          <li>Роль admin: зарегистрируйте `admin@ege.local`</li>
+          <li>После регистрации открывается пробный доступ к математике</li>
+          <li>На странице оплаты можно открыть доступ ко всем курсам</li>
+          <li>Для администрирования используйте аккаунт администратора</li>
         </ul>
       </Card>
     </div>

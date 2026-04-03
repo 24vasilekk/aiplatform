@@ -101,7 +101,7 @@ export function StudentDashboardOverview({
             <p className="text-xs uppercase tracking-wide text-sky-700">Лояльность</p>
             <p className="text-2xl font-semibold text-slate-900">{loyaltySnapshot.pointsBalance} баллов</p>
             <p className="text-sm text-slate-700">
-              Списано: {loyaltySnapshot.lifetimeRedeemedPoints} · Начислено: {loyaltySnapshot.lifetimeEarnedPoints}
+              Списано: {loyaltySnapshot.lifetimeRedeemedPoints}, начислено: {loyaltySnapshot.lifetimeEarnedPoints}
             </p>
           </div>
           <p className="mt-4 text-sm text-slate-600">
@@ -119,7 +119,7 @@ export function StudentDashboardOverview({
             <p className="text-xs uppercase tracking-wide text-sky-700">Курсы и оплата</p>
             <h2 className="text-xl font-semibold text-slate-900">Ваши программы и доступ</h2>
             <p className="text-sm text-slate-700">
-              Открыто: {coursesStats.opened} из {coursesStats.total} · Закрыто: {coursesStats.locked}
+              Открыто: {coursesStats.opened} из {coursesStats.total}, закрыто: {coursesStats.locked}
             </p>
           </div>
           <p className="text-sm text-slate-600">
