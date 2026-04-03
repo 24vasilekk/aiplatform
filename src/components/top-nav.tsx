@@ -26,23 +26,26 @@ const links: NavLink[] = [
   { href: "/admin", label: "Админка", roles: ["admin"] },
 ];
 
-export function TopNav() {
+export function TopNav({ initialRole = null }: { initialRole?: UserRole | null }) {
   const [open, setOpen] = useState(false);
-  const [role, setRole] = useState<UserRole | null>(null);
+  const [role, setRole] = useState<UserRole | null>(initialRole);
 
   useEffect(() => {
     async function loadRole() {
       try {
         const response = await fetch("/api/me", { cache: "no-store" });
+        if (!response.ok) return;
         const data = (await response.json().catch(() => ({ user: null }))) as MeResponse;
-        setRole(data.user?.role ?? null);
+        if (data.user?.role) {
+          setRole(data.user.role);
+        }
       } catch {
-        setRole(null);
+        // Keep server-provided role when runtime request fails.
       }
     }
 
     void loadRole();
-  }, []);
+  }, [initialRole]);
 
   const visibleLinks = links.filter((link) => {
     if (!link.roles || link.roles.length === 0) return true;
