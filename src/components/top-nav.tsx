@@ -1,21 +1,54 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AuthControls } from "@/components/auth-controls";
 
-const links = [
+type UserRole = "student" | "tutor" | "admin";
+
+type NavLink = {
+  href: string;
+  label: string;
+  roles?: UserRole[];
+};
+
+type MeResponse = {
+  user: { role: UserRole } | null;
+};
+
+const links: NavLink[] = [
   { href: "/blog", label: "Блог" },
   { href: "/dashboard", label: "Кабинет" },
-  { href: "/tutor", label: "Кабинет репетитора" },
+  { href: "/tutor", label: "Кабинет репетитора", roles: ["tutor"] },
   { href: "/tutors", label: "Репетиторы" },
   { href: "/chat", label: "Общий AI-чат" },
   { href: "/pricing", label: "Оплата" },
-  { href: "/admin", label: "Админка" },
+  { href: "/admin", label: "Админка", roles: ["admin"] },
 ];
 
 export function TopNav() {
   const [open, setOpen] = useState(false);
+  const [role, setRole] = useState<UserRole | null>(null);
+
+  useEffect(() => {
+    async function loadRole() {
+      try {
+        const response = await fetch("/api/me", { cache: "no-store" });
+        const data = (await response.json().catch(() => ({ user: null }))) as MeResponse;
+        setRole(data.user?.role ?? null);
+      } catch {
+        setRole(null);
+      }
+    }
+
+    void loadRole();
+  }, []);
+
+  const visibleLinks = links.filter((link) => {
+    if (!link.roles || link.roles.length === 0) return true;
+    if (!role) return false;
+    return link.roles.includes(role);
+  });
 
   return (
     <header className="border-b border-slate-200 bg-white">
@@ -38,7 +71,7 @@ export function TopNav() {
           </div>
 
           <nav className="hidden items-center gap-2 text-sm text-slate-700 md:flex">
-            {links.map((link) => (
+            {visibleLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
@@ -54,7 +87,7 @@ export function TopNav() {
         {open ? (
           <div id="mobile-nav" className="mt-3 space-y-2 border-t border-slate-200 pt-3 md:hidden">
             <nav className="grid gap-1 text-sm text-slate-700">
-              {links.map((link) => (
+              {visibleLinks.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
