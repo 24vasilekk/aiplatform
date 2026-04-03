@@ -90,7 +90,13 @@ export default async function AdminPage() {
   else degradedMode = true;
   if (settled[5].status === "fulfilled") posts = settled[5].value;
   else degradedMode = true;
-  const catalogCourses = await listAllCourses();
+  let catalogCourses: Awaited<ReturnType<typeof listAllCourses>> = [];
+  try {
+    catalogCourses = await listAllCourses();
+  } catch {
+    degradedMode = true;
+    catalogCourses = [];
+  }
 
   return (
     <section className="space-y-4">

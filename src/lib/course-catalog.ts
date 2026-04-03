@@ -59,7 +59,13 @@ export async function listAllCourses(): Promise<CatalogCourse[]> {
   const cached = getCached<CatalogCourse[]>(cacheKey);
   if (cached) return cached;
 
-  const customCourses = await listCustomCourses();
+  let customCourses: Awaited<ReturnType<typeof listCustomCourses>> = [];
+  try {
+    customCourses = await listCustomCourses();
+  } catch {
+    // Keep catalog available even when DB custom tables are temporarily unavailable.
+    customCourses = [];
+  }
 
   const result = [
     ...staticCourses.map((course) => ({ ...course, source: "static" as const })),

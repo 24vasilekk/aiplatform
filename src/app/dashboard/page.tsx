@@ -139,7 +139,13 @@ export default async function DashboardPage() {
 
   const paidSnapshot = await getDemoPaidAccessSnapshot();
 
-  const courses = await listAllCourses();
+  let courses: Awaited<ReturnType<typeof listAllCourses>> = [];
+  try {
+    courses = await listAllCourses();
+  } catch {
+    degradedMode = true;
+    courses = [];
+  }
   const itemsWithFallback = await Promise.all(
     courses.map(async (course) => {
       if (paidSnapshot.all || paidSnapshot.courseIds.includes(course.id)) {
